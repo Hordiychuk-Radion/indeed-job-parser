@@ -1,0 +1,17 @@
+[search]
+country = "Czech Republic"
+country_code = "CZ"
+location = "Prague"
+queries = ["QA Engineer"]
+results_per_query = 3
+days_old = 14
+distance_km = 50
+remote_only = false
+
+[filters]
+max_experience_years = 5
+include_unknown = true
+
+[storage]
+database_path = "../data/smoke.db"
+output_dir = "../output/smoke"

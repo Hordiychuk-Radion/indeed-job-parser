@@ -1,0 +1,28 @@
+[search]
+country = "Czech Republic"
+country_code = "CZ"
+location = "Czechia"
+queries = [
+  "QA Engineer",
+  "QA Automation Engineer",
+  "Software QA Engineer",
+  "Test Automation Engineer",
+  "Data Quality Engineer",
+  "Data Quality Analyst",
+]
+results_per_query = 25
+days_old = 14
+distance_km = 80
+remote_only = false
+# job_type = "fulltime"
+
+[filters]
+max_experience_years = 5
+include_unknown = true
+# Зарплата перевіряється після збору, лише коли Indeed її надав.
+# min_salary = 60000
+# salary_currency = "CZK"
+
+[storage]
+database_path = "../data/jobs.db"
+output_dir = "../output"
