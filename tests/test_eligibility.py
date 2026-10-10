@@ -30,6 +30,18 @@ def test_plain_qa_without_experience_is_unknown():
     assert decision.reason == "experience_not_stated"
 
 
+def test_accepts_role_selected_by_configured_title_pattern():
+    decision = evaluate_job(
+        row("Senior Data Engineer", "Requires 4 years of experience."),
+        5,
+        include_title_patterns=("Data Engineer",),
+        exclude_title_patterns=("Lead", "Manager"),
+    )
+
+    assert decision.status == "eligible"
+    assert decision.required_years == 4
+
+
 def test_middle_title_is_eligible_without_explicit_years():
     decision = evaluate_job(row("Middle Test Automation Engineer"), 5)
     assert decision.status == "eligible"

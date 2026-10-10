@@ -1,0 +1,37 @@
+[search]
+country = "Germany"
+country_code = "DE"
+location = "Berlin"
+queries = [
+  "Data Engineer",
+  "ETL Developer",
+  "Data Platform Engineer",
+]
+results_per_query = 25
+days_old = 14
+distance_km = 80
+remote_only = false
+# job_type = "fulltime"
+
+[filters]
+max_experience_years = 5
+include_unknown = true
+include_title_patterns = [
+  "Data Engineer",
+  "ETL Developer",
+  "Data Platform Engineer",
+]
+exclude_title_patterns = [
+  "Junior",
+  "Intern",
+  "Trainee",
+  "Lead",
+  "Principal",
+  "Staff",
+  "Manager",
+  "Director",
+]
+
+[storage]
+database_path = "../data/data-engineer.db"
+output_dir = "../output/data-engineer"

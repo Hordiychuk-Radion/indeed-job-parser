@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .collector import collect_indeed
-from .config import AppConfig, load_config
+from .config import AppConfig, ConfigOverrides, load_config
 from .eligibility import evaluate_job
 from .exporter import export_jobs
 from .models import JobRecord
@@ -26,7 +26,12 @@ class RunSummary:
 
 
 def _apply_decision(job: JobRecord, config: AppConfig) -> JobRecord:
-    decision = evaluate_job(asdict(job), config.filters.max_experience_years)
+    decision = evaluate_job(
+        asdict(job),
+        config.filters.max_experience_years,
+        include_title_patterns=config.filters.include_title_patterns,
+        exclude_title_patterns=config.filters.exclude_title_patterns,
+    )
     status, reason = decision.status, decision.reason
     if (
         status != "rejected"
@@ -50,8 +55,10 @@ def _apply_decision(job: JobRecord, config: AppConfig) -> JobRecord:
 def run_pipeline(
     config_path: str | Path,
     scrape_fn: Callable[..., Any] | None = None,
+    *,
+    overrides: ConfigOverrides | None = None,
 ) -> RunSummary:
-    config = load_config(config_path)
+    config = load_config(config_path, overrides=overrides)
     raw_rows, errors = collect_indeed(config.search, scrape_fn=scrape_fn)
     processed: list[JobRecord] = []
     with JobRepository(config.storage.database_path) as repository:

@@ -34,6 +34,33 @@ uv sync --all-groups
 uv run indeed-jobs run --config config/example.toml
 ```
 
+Одноразовий пошук можна задати прямо в терміналі. `--config` необов'язковий і за замовчуванням використовує `config/example.toml`:
+
+```bash
+uv run indeed-jobs run \
+  --title "Data Engineer" \
+  --country "Germany" \
+  --country-code DE \
+  --location "Berlin" \
+  --days-old 7 \
+  --results 50
+```
+
+Кілька професій задаються повторенням `--title`:
+
+```bash
+uv run indeed-jobs run \
+  --title "Data Engineer" \
+  --title "ETL Developer" \
+  --title "Data Platform Engineer" \
+  --country "Czech Republic" \
+  --country-code CZ \
+  --location "Prague" \
+  --remote-only
+```
+
+CLI-параметри діють тільки під час поточного запуску та не переписують TOML-файл. Пріоритет: **CLI → TOML → стандартні значення програми**.
+
 Або через Python-модуль:
 
 ```bash
@@ -66,12 +93,22 @@ remote_only = false
 [filters]
 max_experience_years = 5
 include_unknown = true
+include_title_patterns = ["QA Engineer", "Data Quality Analyst"]
+exclude_title_patterns = ["Junior", "Intern", "Lead", "Principal", "Staff", "Manager"]
 # min_salary = 60000
 # salary_currency = "CZK"
 
 [storage]
 database_path = "../data/jobs.db"
 output_dir = "../output"
+```
+
+Якщо `include_title_patterns` не заданий, програма використовує значення `queries`. Тобто для звичайного випадку достатньо змінити `queries` або передати `--title`. Окремі patterns потрібні, коли пошуковий запит ширший за допустимі назви вакансій.
+
+Усі доступні параметри термінала:
+
+```bash
+uv run indeed-jobs run --help
 ```
 
 ## Команди розробника

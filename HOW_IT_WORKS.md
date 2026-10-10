@@ -28,6 +28,10 @@ CLI `indeed-jobs run --config ...` лише запускає цей потік �
 - `days_old` конвертується в години;
 - кожен query запускається незалежно, тому помилка одного запиту не стирає успішні результати інших.
 
+Професія не захардкоджена в Python. `filters.include_title_patterns` визначає допустимі фрази в title, а `filters.exclude_title_patterns` — небажані рівні або ролі. Якщо include-список відсутній, ним автоматично стають `search.queries`.
+
+CLI створює `ConfigOverrides` і передає його в pipeline. Значення з CLI замінюють конфіг лише в пам'яті на час одного запуску. `--title` одночасно замінює `search.queries` та `include_title_patterns`, тому швидкий перехід із QA на Data Engineer не потребує змін Python-коду.
+
 ## 3. Нормалізація
 
 `normalizer.py` перетворює нестабільний словник JobSpy у `JobRecord` із фіксованими полями.
@@ -47,7 +51,7 @@ CLI `indeed-jobs run --config ...` лише запускає цей потік �
 
 ## 4. Eligibility до 5 років
 
-`eligibility.py` спочатку перевіряє **назву**, а не ключові слова в описі.
+`eligibility.py` спочатку перевіряє **назву**, а не ключові слова в описі. Допустимі та виключені фрази надходять із конфігурації, тому одна й та сама логіка працює для QA, Data Engineer та інших професій.
 
 Рішення:
 
@@ -120,3 +124,29 @@ SQLite зберігає історію між запусками, а файли 
 - CLI JSON summary.
 
 Окремо виконується малий live smoke test із `config/smoke.toml`.
+
+## 9. Швидкі CLI overrides
+
+Підтримуються:
+
+- `--title` — можна повторювати;
+- `--country`, `--country-code`, `--location`;
+- `--results`, `--days-old`, `--distance-km`;
+- `--remote-only` / `--no-remote-only`;
+- `--job-type`;
+- `--max-experience-years`;
+- `--include-unknown` / `--no-include-unknown`;
+- `--min-salary`, `--salary-currency`.
+
+Приклад:
+
+```bash
+uv run indeed-jobs run \
+  --title "Data Engineer" \
+  --title "ETL Developer" \
+  --country "Germany" \
+  --country-code DE \
+  --location "Berlin" \
+  --days-old 7 \
+  --results 50
+```

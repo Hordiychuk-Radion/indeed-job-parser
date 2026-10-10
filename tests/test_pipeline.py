@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from indeed_job_parser.config import ConfigOverrides
 from indeed_job_parser.pipeline import run_pipeline
 
 
@@ -88,3 +89,81 @@ def test_pipeline_persists_all_decisions_and_exports_selected_rows(tmp_path: Pat
     assert "[Middle QA Engineer](https://cz.indeed.com/viewjob?jk=eligible)" in report
     assert "eligible: 1" in report
     assert "unknown: 1" in report
+
+
+def test_pipeline_uses_configured_role_patterns(tmp_path: Path):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        '''
+[search]
+country = "Germany"
+country_code = "DE"
+location = "Berlin"
+queries = ["Data Engineer"]
+
+[filters]
+include_title_patterns = ["Data Engineer", "ETL Developer"]
+exclude_title_patterns = ["Lead", "Manager"]
+max_experience_years = 5
+include_unknown = true
+
+[storage]
+database_path = "data/jobs.db"
+output_dir = "output"
+'''
+    )
+
+    def fake_scrape(**kwargs):
+        return pd.DataFrame([
+            {
+                "id": "data-1",
+                "site": "indeed",
+                "title": "Data Engineer",
+                "company": "A",
+                "location": "Berlin",
+                "job_url": "https://de.indeed.com/viewjob?jk=data-1",
+                "description": "Requires 3 years of experience.",
+            }
+        ])
+
+    summary = run_pipeline(config_path, scrape_fn=fake_scrape)
+
+    assert summary.rows_eligible == 1
+    selected = json.loads((tmp_path / "output/jobs-selected.json").read_text())
+    assert selected[0]["title"] == "Data Engineer"
+
+
+def test_pipeline_applies_cli_overrides_end_to_end(tmp_path: Path):
+    config_path = tmp_path / "config.toml"
+    write_config(config_path)
+
+    def fake_scrape(**kwargs):
+        assert kwargs["search_term"] == "Data Engineer"
+        assert kwargs["country_indeed"] == "Germany"
+        assert kwargs["location"] == "Berlin"
+        assert kwargs["results_wanted"] == 2
+        return pd.DataFrame([
+            {
+                "id": "data-cli",
+                "site": "indeed",
+                "title": "Data Engineer",
+                "company": "CLI Company",
+                "location": "Berlin",
+                "job_url": "https://de.indeed.com/viewjob?jk=data-cli",
+                "description": "Requires 3 years of experience.",
+            }
+        ])
+
+    summary = run_pipeline(
+        config_path,
+        scrape_fn=fake_scrape,
+        overrides=ConfigOverrides(
+            titles=("Data Engineer",),
+            country="Germany",
+            country_code="DE",
+            location="Berlin",
+            results_per_query=2,
+        ),
+    )
+
+    assert summary.rows_eligible == 1

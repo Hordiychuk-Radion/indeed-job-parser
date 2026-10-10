@@ -2,15 +2,34 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Mapping, Sequence
 
-ROLE_PATTERN = re.compile(
-    r"(?:\bqa\b|quality assurance|data quality|software test(?:er|ing)?|test automation|automation qa|qa automation|\bsdet\b)",
-    re.IGNORECASE,
+DEFAULT_INCLUDE_TITLE_PATTERNS = (
+    "qa",
+    "quality assurance",
+    "data quality",
+    "software tester",
+    "software testing",
+    "test automation",
+    "automation qa",
+    "qa automation",
+    "sdet",
 )
-EXCLUDED_LEVEL_PATTERN = re.compile(
-    r"(?:\bjunior\b|\bjr\.?\b|trainee|intern(?:ship)?|graduate|\blead\b|team lead|principal|staff|head|manager|director|chief)",
-    re.IGNORECASE,
+DEFAULT_EXCLUDE_TITLE_PATTERNS = (
+    "junior",
+    "jr",
+    "trainee",
+    "intern",
+    "internship",
+    "graduate",
+    "lead",
+    "team lead",
+    "principal",
+    "staff",
+    "head",
+    "manager",
+    "director",
+    "chief",
 )
 SENIOR_PATTERN = re.compile(r"(?:\bsenior\b|\bsr\.?\b)", re.IGNORECASE)
 MIDDLE_PATTERN = re.compile(r"(?:\bmiddle\b|\bmid(?:-level)?\b|\bmedior\b|\bexperienced\b)", re.IGNORECASE)
@@ -38,12 +57,26 @@ def extract_required_years(description: str) -> int | None:
     return max(values) if values else None
 
 
-def evaluate_job(row: Mapping[str, object], max_experience_years: int = 5) -> EligibilityDecision:
+def _matches_title(title: str, patterns: Sequence[str]) -> bool:
+    return any(
+        re.search(rf"(?<!\w){re.escape(pattern.strip())}(?!\w)", title, re.IGNORECASE)
+        for pattern in patterns
+        if pattern.strip()
+    )
+
+
+def evaluate_job(
+    row: Mapping[str, object],
+    max_experience_years: int = 5,
+    *,
+    include_title_patterns: Sequence[str] = DEFAULT_INCLUDE_TITLE_PATTERNS,
+    exclude_title_patterns: Sequence[str] = DEFAULT_EXCLUDE_TITLE_PATTERNS,
+) -> EligibilityDecision:
     title = str(row.get("title") or "").strip()
     description = str(row.get("description") or "")
-    if not ROLE_PATTERN.search(title):
+    if not _matches_title(title, include_title_patterns):
         return EligibilityDecision("rejected", "irrelevant_title")
-    if EXCLUDED_LEVEL_PATTERN.search(title):
+    if _matches_title(title, exclude_title_patterns):
         return EligibilityDecision("rejected", "excluded_level")
 
     required_years = extract_required_years(description)

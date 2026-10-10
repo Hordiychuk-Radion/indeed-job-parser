@@ -19,6 +19,10 @@ remote_only = false
 [filters]
 max_experience_years = 5
 include_unknown = true
+# Якщо список не заданий, використовуються search.queries.
+# include_title_patterns = ["QA Engineer", "Data Quality Analyst"]
+# Можна перевизначити стандартні виключення рівнів.
+# exclude_title_patterns = ["Junior", "Intern", "Lead", "Principal", "Staff", "Manager"]
 # Зарплата перевіряється після збору, лише коли Indeed її надав.
 # min_salary = 60000
 # salary_currency = "CZK"
