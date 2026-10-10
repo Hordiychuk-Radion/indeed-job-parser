@@ -16,6 +16,9 @@ remote_only = false
 [filters]
 max_experience_years = 5
 include_unknown = true
+# Розкоментуйте один із варіантів для суворого рівня:
+# allowed_seniority = ["middle"]
+# allowed_seniority = ["senior"]
 include_title_patterns = [
   "Data Engineer",
   "ETL Developer",

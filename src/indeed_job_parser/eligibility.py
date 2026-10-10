@@ -65,12 +65,21 @@ def _matches_title(title: str, patterns: Sequence[str]) -> bool:
     )
 
 
+def detect_seniority(title: str, description: str = "") -> str:
+    if SENIOR_PATTERN.search(title):
+        return "senior"
+    if MIDDLE_PATTERN.search(title) or MIDDLE_DESCRIPTION_PATTERN.search(description):
+        return "middle"
+    return "unspecified"
+
+
 def evaluate_job(
     row: Mapping[str, object],
     max_experience_years: int = 5,
     *,
     include_title_patterns: Sequence[str] = DEFAULT_INCLUDE_TITLE_PATTERNS,
     exclude_title_patterns: Sequence[str] = DEFAULT_EXCLUDE_TITLE_PATTERNS,
+    allowed_seniority: Sequence[str] = (),
 ) -> EligibilityDecision:
     title = str(row.get("title") or "").strip()
     description = str(row.get("description") or "")
@@ -82,13 +91,16 @@ def evaluate_job(
     required_years = extract_required_years(description)
     if required_years is not None and required_years > max_experience_years:
         return EligibilityDecision("rejected", "experience_above_limit", required_years)
-    if SENIOR_PATTERN.search(title):
+    seniority = detect_seniority(title, description)
+    if allowed_seniority and seniority not in allowed_seniority:
+        return EligibilityDecision("rejected", "seniority_not_allowed", required_years)
+    if seniority == "senior":
         if required_years is None:
             return EligibilityDecision("rejected", "senior_without_eligible_experience")
         return EligibilityDecision("eligible", "senior_within_experience_limit", required_years)
     if MIDDLE_PATTERN.search(title):
         return EligibilityDecision("eligible", "middle_level_title", required_years)
-    if MIDDLE_DESCRIPTION_PATTERN.search(description):
+    if seniority == "middle":
         return EligibilityDecision("eligible", "middle_level_description", required_years)
     if required_years is not None:
         return EligibilityDecision("eligible", "experience_within_limit", required_years)

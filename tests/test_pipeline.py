@@ -26,6 +26,7 @@ max_experience_years = 5
 include_unknown = true
 min_salary = 60000
 salary_currency = "CZK"
+salary_period = "monthly"
 
 [storage]
 database_path = "data/jobs.db"
@@ -71,17 +72,33 @@ def test_pipeline_persists_all_decisions_and_exports_selected_rows(tmp_path: Pat
                 "job_url": "https://cz.indeed.com/viewjob?jk=rejected",
                 "description": "Requires 8 years of experience.",
             },
+            {
+                "id": "wrong-period",
+                "site": "indeed",
+                "title": "Middle QA Engineer",
+                "company": "D",
+                "location": "Prague",
+                "job_url": "https://cz.indeed.com/viewjob?jk=wrong-period",
+                "description": "Automation testing",
+                "min_amount": 40000,
+                "max_amount": 50000,
+                "currency": "CZK",
+                "interval": "yearly",
+            },
         ])
 
     summary = run_pipeline(config_path, scrape_fn=fake_scrape)
 
-    assert summary.rows_received == 3
+    assert summary.rows_received == 4
     assert summary.rows_eligible == 1
     assert summary.rows_unknown == 1
-    assert summary.rows_rejected == 1
+    assert summary.rows_rejected == 2
     database = sqlite3.connect(tmp_path / "data/jobs.db")
-    assert database.execute("SELECT count(*) FROM jobs").fetchone()[0] == 3
-    assert database.execute("SELECT count(*) FROM job_observations").fetchone()[0] == 3
+    assert database.execute("SELECT count(*) FROM jobs").fetchone()[0] == 4
+    assert database.execute("SELECT count(*) FROM job_observations").fetchone()[0] == 4
+    assert database.execute(
+        "SELECT eligibility_reason FROM jobs WHERE source_job_id='wrong-period'"
+    ).fetchone()[0] == "salary_period_mismatch"
     database.close()
     selected = json.loads((tmp_path / "output/jobs-selected.json").read_text())
     assert [row["company"] for row in selected] == ["A", "B"]
@@ -104,6 +121,7 @@ queries = ["Data Engineer"]
 [filters]
 include_title_patterns = ["Data Engineer", "ETL Developer"]
 exclude_title_patterns = ["Lead", "Manager"]
+allowed_seniority = ["middle"]
 max_experience_years = 5
 include_unknown = true
 
@@ -118,19 +136,29 @@ output_dir = "output"
             {
                 "id": "data-1",
                 "site": "indeed",
-                "title": "Data Engineer",
+                "title": "Middle Data Engineer",
                 "company": "A",
                 "location": "Berlin",
                 "job_url": "https://de.indeed.com/viewjob?jk=data-1",
                 "description": "Requires 3 years of experience.",
-            }
+            },
+            {
+                "id": "data-2",
+                "site": "indeed",
+                "title": "Senior Data Engineer",
+                "company": "B",
+                "location": "Berlin",
+                "job_url": "https://de.indeed.com/viewjob?jk=data-2",
+                "description": "Requires 4 years of experience.",
+            },
         ])
 
     summary = run_pipeline(config_path, scrape_fn=fake_scrape)
 
     assert summary.rows_eligible == 1
+    assert summary.rows_rejected == 1
     selected = json.loads((tmp_path / "output/jobs-selected.json").read_text())
-    assert selected[0]["title"] == "Data Engineer"
+    assert selected[0]["title"] == "Middle Data Engineer"
 
 
 def test_pipeline_applies_cli_overrides_end_to_end(tmp_path: Path):

@@ -48,6 +48,34 @@ def test_middle_title_is_eligible_without_explicit_years():
     assert decision.reason == "middle_level_title"
 
 
+def test_middle_only_filter_rejects_other_seniority_levels():
+    middle = evaluate_job(
+        row("Middle Data Engineer"),
+        5,
+        include_title_patterns=("Data Engineer",),
+        exclude_title_patterns=("Lead", "Manager"),
+        allowed_seniority=("middle",),
+    )
+    senior = evaluate_job(
+        row("Senior Data Engineer", "Requires 4 years of experience."),
+        5,
+        include_title_patterns=("Data Engineer",),
+        exclude_title_patterns=("Lead", "Manager"),
+        allowed_seniority=("middle",),
+    )
+    unspecified = evaluate_job(
+        row("Data Engineer", "Requires 3 years of experience."),
+        5,
+        include_title_patterns=("Data Engineer",),
+        exclude_title_patterns=("Lead", "Manager"),
+        allowed_seniority=("middle",),
+    )
+
+    assert middle.status == "eligible"
+    assert senior.reason == "seniority_not_allowed"
+    assert unspecified.reason == "seniority_not_allowed"
+
+
 def test_czech_medior_marker_in_description_is_eligible():
     decision = evaluate_job(row("Tester / QA Engineer", "Hledáme mediorního API Testera."), 5)
     assert decision.status == "eligible"

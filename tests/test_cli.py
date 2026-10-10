@@ -18,6 +18,9 @@ def test_cli_prints_machine_readable_summary(tmp_path: Path, capsys):
         assert overrides.days_old == 7
         assert overrides.results_per_query == 50
         assert overrides.remote_only is True
+        assert overrides.seniority == ("middle",)
+        assert overrides.exclude_titles == ("Lead", "Manager")
+        assert overrides.salary_period == "yearly"
         return RunSummary(
             run_id="run-1",
             rows_received=10,
@@ -49,6 +52,14 @@ def test_cli_prints_machine_readable_summary(tmp_path: Path, capsys):
             "--results",
             "50",
             "--remote-only",
+            "--seniority",
+            "middle",
+            "--exclude-title",
+            "Lead",
+            "--exclude-title",
+            "Manager",
+            "--salary-period",
+            "yearly",
         ],
         runner=fake_runner,
     )

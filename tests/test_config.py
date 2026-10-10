@@ -24,6 +24,7 @@ max_experience_years = 5
 include_unknown = true
 min_salary = 60000
 salary_currency = "CZK"
+salary_period = "monthly"
 
 [storage]
 database_path = "data/jobs.db"
@@ -37,6 +38,7 @@ output_dir = "output"
     assert "internship" in config.filters.exclude_title_patterns
     assert "team lead" in config.filters.exclude_title_patterns
     assert config.filters.max_experience_years == 5
+    assert config.filters.salary_period == "monthly"
     assert config.storage.database_path == tmp_path / "data/jobs.db"
 
 
@@ -53,6 +55,7 @@ queries = ["Data Engineer"]
 [filters]
 include_title_patterns = ["Data Engineer", "ETL Developer"]
 exclude_title_patterns = ["Lead", "Manager"]
+allowed_seniority = ["middle"]
 
 [storage]
 database_path = "jobs.db"
@@ -64,6 +67,7 @@ output_dir = "output"
 
     assert config.filters.include_title_patterns == ("Data Engineer", "ETL Developer")
     assert config.filters.exclude_title_patterns == ("Lead", "Manager")
+    assert config.filters.allowed_seniority == ("middle",)
 
 
 def test_cli_overrides_replace_runtime_search_and_role_values(tmp_path: Path):

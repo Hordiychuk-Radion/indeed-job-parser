@@ -39,6 +39,7 @@ uv run indeed-jobs run --config config/example.toml
 ```bash
 uv run indeed-jobs run \
   --title "Data Engineer" \
+  --seniority middle \
   --country "Germany" \
   --country-code DE \
   --location "Berlin" \
@@ -60,6 +61,22 @@ uv run indeed-jobs run \
 ```
 
 CLI-параметри діють тільки під час поточного запуску та не переписують TOML-файл. Пріоритет: **CLI → TOML → стандартні значення програми**.
+
+Професія та рівень незалежні. Наприклад:
+
+```bash
+# Тільки Middle Data Engineer
+uv run indeed-jobs run --title "Data Engineer" --seniority middle
+
+# Тільки Senior Data Engineer; усе одно потрібна явна вимога ≤5 років
+uv run indeed-jobs run --title "Data Engineer" --seniority senior
+
+# Middle або Senior
+uv run indeed-jobs run \
+  --title "Data Engineer" \
+  --seniority middle \
+  --seniority senior
+```
 
 Або через Python-модуль:
 
@@ -93,10 +110,12 @@ remote_only = false
 [filters]
 max_experience_years = 5
 include_unknown = true
+allowed_seniority = ["middle"]
 include_title_patterns = ["QA Engineer", "Data Quality Analyst"]
 exclude_title_patterns = ["Junior", "Intern", "Lead", "Principal", "Staff", "Manager"]
 # min_salary = 60000
 # salary_currency = "CZK"
+# salary_period = "monthly"
 
 [storage]
 database_path = "../data/jobs.db"
@@ -104,6 +123,14 @@ output_dir = "../output"
 ```
 
 Якщо `include_title_patterns` не заданий, програма використовує значення `queries`. Тобто для звичайного випадку достатньо змінити `queries` або передати `--title`. Окремі patterns потрібні, коли пошуковий запит ширший за допустимі назви вакансій.
+
+### Які фільтри автоматизовані
+
+- **Пошук у JobSpy:** title/query, country, location, radius, freshness, result count, remote-only, job type.
+- **Перевірка після збору:** допустимі та виключені title-фрази, seniority, максимум років досвіду, unknown-policy, мінімальна зарплата, валюта й salary period.
+- `--exclude-title` можна повторювати так само, як `--title`.
+- `--seniority` приймає `middle`, `senior` або `unspecified`; параметр можна повторити для кількох рівнів.
+- Зарплата порівнюється лише в узгодженій валюті та періоді; відомі невідповідності отримують окрему причину відхилення.
 
 Усі доступні параметри термінала:
 

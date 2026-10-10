@@ -31,19 +31,24 @@ def _apply_decision(job: JobRecord, config: AppConfig) -> JobRecord:
         config.filters.max_experience_years,
         include_title_patterns=config.filters.include_title_patterns,
         exclude_title_patterns=config.filters.exclude_title_patterns,
+        allowed_seniority=config.filters.allowed_seniority,
     )
     status, reason = decision.status, decision.reason
-    if (
-        status != "rejected"
-        and config.filters.min_salary is not None
-        and job.salary_max is not None
-        and (
-            config.filters.salary_currency is None
-            or job.salary_currency == config.filters.salary_currency
-        )
-        and job.salary_max < config.filters.min_salary
-    ):
-        status, reason = "rejected", "salary_below_minimum"
+    if status != "rejected" and config.filters.min_salary is not None and job.salary_max is not None:
+        if (
+            config.filters.salary_currency is not None
+            and job.salary_currency is not None
+            and job.salary_currency != config.filters.salary_currency
+        ):
+            status, reason = "rejected", "salary_currency_mismatch"
+        elif (
+            config.filters.salary_period is not None
+            and job.salary_period is not None
+            and job.salary_period.casefold() != config.filters.salary_period
+        ):
+            status, reason = "rejected", "salary_period_mismatch"
+        elif job.salary_max < config.filters.min_salary:
+            status, reason = "rejected", "salary_below_minimum"
     return replace(
         job,
         eligibility=status,

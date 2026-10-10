@@ -22,6 +22,7 @@ DEFAULT_EXCLUDE_TITLE_PATTERNS = (
     "director",
     "chief",
 )
+SENIORITY_VALUES = {"middle", "senior", "unspecified"}
 
 
 class ConfigError(ValueError):
@@ -47,8 +48,10 @@ class FilterConfig:
     include_unknown: bool = True
     min_salary: float | None = None
     salary_currency: str | None = None
+    salary_period: str | None = None
     include_title_patterns: tuple[str, ...] = ()
     exclude_title_patterns: tuple[str, ...] = DEFAULT_EXCLUDE_TITLE_PATTERNS
+    allowed_seniority: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +70,7 @@ class AppConfig:
 @dataclass(frozen=True, slots=True)
 class ConfigOverrides:
     titles: tuple[str, ...] | None = None
+    exclude_titles: tuple[str, ...] | None = None
     country: str | None = None
     country_code: str | None = None
     location: str | None = None
@@ -79,6 +83,8 @@ class ConfigOverrides:
     include_unknown: bool | None = None
     min_salary: float | None = None
     salary_currency: str | None = None
+    salary_period: str | None = None
+    seniority: tuple[str, ...] | None = None
 
 
 def _positive(value: Any, name: str, default: int) -> int:
@@ -92,10 +98,25 @@ def _strings(values: Any) -> tuple[str, ...]:
     return tuple(str(value).strip() for value in values or () if str(value).strip())
 
 
+def _seniority_values(values: Any) -> tuple[str, ...]:
+    result = tuple(value.casefold() for value in _strings(values))
+    invalid = sorted(set(result) - SENIORITY_VALUES)
+    if invalid:
+        raise ConfigError(
+            "seniority must contain only: middle, senior, unspecified; "
+            f"invalid: {', '.join(invalid)}"
+        )
+    return result
+
+
 def apply_overrides(config: AppConfig, overrides: ConfigOverrides | None) -> AppConfig:
     if overrides is None:
         return config
     titles = _strings(overrides.titles) if overrides.titles is not None else None
+    exclude_titles = (
+        _strings(overrides.exclude_titles) if overrides.exclude_titles is not None else None
+    )
+    seniority = _seniority_values(overrides.seniority) if overrides.seniority is not None else None
     if overrides.titles is not None and not titles:
         raise ConfigError("--title must not be empty")
     search = replace(
@@ -152,7 +173,16 @@ def apply_overrides(config: AppConfig, overrides: ConfigOverrides | None) -> App
             if overrides.salary_currency is not None
             else config.filters.salary_currency
         ),
+        salary_period=(
+            overrides.salary_period.strip().casefold()
+            if overrides.salary_period is not None
+            else config.filters.salary_period
+        ),
         include_title_patterns=titles or config.filters.include_title_patterns,
+        exclude_title_patterns=(
+            exclude_titles if exclude_titles is not None else config.filters.exclude_title_patterns
+        ),
+        allowed_seniority=seniority if seniority is not None else config.filters.allowed_seniority,
     )
     return replace(config, search=search, filters=filters)
 
@@ -190,12 +220,18 @@ def load_config(path: str | Path, overrides: ConfigOverrides | None = None) -> A
             include_unknown=bool(filters.get("include_unknown", True)),
             min_salary=float(filters["min_salary"]) if filters.get("min_salary") is not None else None,
             salary_currency=str(filters["salary_currency"]).strip().upper() if filters.get("salary_currency") else None,
+            salary_period=(
+                str(filters["salary_period"]).strip().casefold()
+                if filters.get("salary_period")
+                else None
+            ),
             include_title_patterns=_strings(filters.get("include_title_patterns")) or queries,
             exclude_title_patterns=(
                 _strings(filters.get("exclude_title_patterns"))
                 if "exclude_title_patterns" in filters
                 else DEFAULT_EXCLUDE_TITLE_PATTERNS
             ),
+            allowed_seniority=_seniority_values(filters.get("allowed_seniority")),
         ),
         storage=StorageConfig(
             database_path=(base / str(storage["database_path"])).resolve(),

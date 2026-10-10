@@ -19,6 +19,8 @@ remote_only = false
 [filters]
 max_experience_years = 5
 include_unknown = true
+# Порожній список = не обмежувати seniority. Доступно: middle, senior, unspecified.
+# allowed_seniority = ["middle"]
 # Якщо список не заданий, використовуються search.queries.
 # include_title_patterns = ["QA Engineer", "Data Quality Analyst"]
 # Можна перевизначити стандартні виключення рівнів.
@@ -26,6 +28,7 @@ include_unknown = true
 # Зарплата перевіряється після збору, лише коли Indeed її надав.
 # min_salary = 60000
 # salary_currency = "CZK"
+# salary_period = "monthly"
 
 [storage]
 database_path = "../data/jobs.db"

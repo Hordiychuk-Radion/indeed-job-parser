@@ -16,6 +16,12 @@ def build_parser() -> argparse.ArgumentParser:
     run = subparsers.add_parser("run", help="Run one configured collection")
     run.add_argument("--config", type=Path, default=Path("config/example.toml"), help="Path to TOML configuration")
     run.add_argument("--title", dest="titles", action="append", help="Job title; repeat for multiple titles")
+    run.add_argument(
+        "--exclude-title",
+        dest="exclude_titles",
+        action="append",
+        help="Reject titles containing this phrase; repeat for multiple phrases",
+    )
     run.add_argument("--country", help="Indeed country name")
     run.add_argument("--country-code", help="ISO country code stored with results")
     run.add_argument("--location", help="City, region, or country")
@@ -25,9 +31,16 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--remote-only", action=argparse.BooleanOptionalAction, default=None)
     run.add_argument("--job-type", help="JobSpy employment type, for example fulltime")
     run.add_argument("--max-experience-years", type=int)
+    run.add_argument(
+        "--seniority",
+        action="append",
+        choices=("middle", "senior", "unspecified"),
+        help="Allowed seniority; repeat to allow multiple levels",
+    )
     run.add_argument("--include-unknown", action=argparse.BooleanOptionalAction, default=None)
     run.add_argument("--min-salary", type=float)
     run.add_argument("--salary-currency")
+    run.add_argument("--salary-period", help="Salary interval, for example yearly or monthly")
     return parser
 
 
@@ -40,6 +53,7 @@ def main(
     if args.command == "run":
         overrides = ConfigOverrides(
             titles=tuple(args.titles) if args.titles else None,
+            exclude_titles=tuple(args.exclude_titles) if args.exclude_titles else None,
             country=args.country,
             country_code=args.country_code,
             location=args.location,
@@ -49,9 +63,11 @@ def main(
             remote_only=args.remote_only,
             job_type=args.job_type,
             max_experience_years=args.max_experience_years,
+            seniority=tuple(args.seniority) if args.seniority else None,
             include_unknown=args.include_unknown,
             min_salary=args.min_salary,
             salary_currency=args.salary_currency,
+            salary_period=args.salary_period,
         )
         summary = runner(args.config, overrides=overrides)
         print(json.dumps(asdict(summary), ensure_ascii=False, indent=2))

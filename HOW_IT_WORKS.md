@@ -32,6 +32,8 @@ CLI `indeed-jobs run --config ...` лише запускає цей потік �
 
 CLI створює `ConfigOverrides` і передає його в pipeline. Значення з CLI замінюють конфіг лише в пам'яті на час одного запуску. `--title` одночасно замінює `search.queries` та `include_title_patterns`, тому швидкий перехід із QA на Data Engineer не потребує змін Python-коду.
 
+`--seniority` незалежно обмежує рівень до `middle`, `senior` або `unspecified`. Кілька значень можна передати повторенням параметра. Порожній список у TOML означає, що окремого seniority-обмеження немає й діють звичайні правила eligibility.
+
 ## 3. Нормалізація
 
 `normalizer.py` перетворює нестабільний словник JobSpy у `JobRecord` із фіксованими полями.
@@ -135,8 +137,10 @@ SQLite зберігає історію між запусками, а файли 
 - `--remote-only` / `--no-remote-only`;
 - `--job-type`;
 - `--max-experience-years`;
+- `--seniority middle|senior|unspecified` — можна повторювати;
+- `--exclude-title` — можна повторювати;
 - `--include-unknown` / `--no-include-unknown`;
-- `--min-salary`, `--salary-currency`.
+- `--min-salary`, `--salary-currency`, `--salary-period`.
 
 Приклад:
 
