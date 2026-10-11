@@ -1,0 +1,20 @@
+[search]
+country = "Czech Republic"
+country_code = "CZ"
+location = "Prague"
+queries = ["Data Engineer", "ETL Developer", "Data Platform Engineer"]
+results_per_query = 50
+days_old = 14
+distance_km = 80
+remote_only = false
+
+[filters]
+max_experience_years = 5
+include_unknown = false
+allowed_seniority = ["middle"]
+include_title_patterns = ["Data Engineer", "ETL Developer", "Data Platform Engineer"]
+exclude_title_patterns = ["Junior", "Intern", "Trainee", "Lead", "Principal", "Staff", "Manager", "Director"]
+
+[storage]
+database_path = "../../data/profiles/data-engineer-middle-cz.db"
+output_dir = "../../output/profiles/data-engineer-middle-cz"

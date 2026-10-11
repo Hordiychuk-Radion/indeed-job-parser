@@ -25,14 +25,40 @@ TOML-конфіг
 - `repository.py` — зберігає поточні вакансії та історію запусків у SQLite;
 - `exporter.py` — створює CSV, JSON і `report.md`;
 - `pipeline.py` — послідовно з'єднує всі етапи;
-- `cli.py` — надає команду `indeed-jobs run`.
+- `profiles.py` — знаходить і створює іменовані TOML-профілі;
+- `cli.py` — надає меню, профілі та розширені CLI-параметри.
 
 ## Швидкий старт
 
 ```bash
 uv sync --all-groups
-uv run indeed-jobs run --config config/example.toml
+uv run indeed-jobs
 ```
+
+Без параметрів відкривається коротке меню:
+
+```text
+1. Запустити збережений профіль
+2. Створити новий профіль
+3. Швидкий одноразовий пошук
+4. Показати профілі
+0. Вихід
+```
+
+Готовий профіль можна запустити однією короткою командою:
+
+```bash
+uv run indeed-jobs run data-engineer-middle-de
+```
+
+Переглянути всі профілі або створити новий через майстер:
+
+```bash
+uv run indeed-jobs profiles
+uv run indeed-jobs create-profile
+```
+
+Профілі зберігаються як TOML-файли у `config/profiles/`. Майстер запитує професії, seniority, країну, місто, кількість, давність, радіус, remote та experience policy і створює окремі SQLite/output paths.
 
 Одноразовий пошук можна задати прямо в терміналі. `--config` необов'язковий і за замовчуванням використовує `config/example.toml`:
 
@@ -61,6 +87,15 @@ uv run indeed-jobs run \
 ```
 
 CLI-параметри діють тільки під час поточного запуску та не переписують TOML-файл. Пріоритет: **CLI → TOML → стандартні значення програми**.
+
+CLI overrides працюють і поверх короткого профілю:
+
+```bash
+uv run indeed-jobs run data-engineer-middle-de \
+  --location Hamburg \
+  --days-old 7 \
+  --results 100
+```
 
 Професія та рівень незалежні. Наприклад:
 

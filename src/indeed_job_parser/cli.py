@@ -2,19 +2,28 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import asdict
 from pathlib import Path
 from typing import Callable, Sequence
 
 from .config import ConfigOverrides
 from .pipeline import RunSummary, run_pipeline
+from .profiles import ProfileDraft, discover_profiles, resolve_profile, write_profile
+
+
+DEFAULT_CONFIG = Path("config/example.toml")
+DEFAULT_PROFILES_DIR = Path("config/profiles")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="indeed-jobs", description="Collect Indeed vacancies into SQLite")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
     run = subparsers.add_parser("run", help="Run one configured collection")
-    run.add_argument("--config", type=Path, default=Path("config/example.toml"), help="Path to TOML configuration")
+    run.add_argument("profile", nargs="?", help="Saved profile name from config/profiles")
+    run.add_argument("--config", type=Path, help="Path to TOML configuration")
+    run.add_argument("--profiles-dir", type=Path, default=DEFAULT_PROFILES_DIR, help=argparse.SUPPRESS)
     run.add_argument("--title", dest="titles", action="append", help="Job title; repeat for multiple titles")
     run.add_argument(
         "--exclude-title",
@@ -41,16 +50,193 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--min-salary", type=float)
     run.add_argument("--salary-currency")
     run.add_argument("--salary-period", help="Salary interval, for example yearly or monthly")
+
+    profiles = subparsers.add_parser("profiles", help="List saved profiles")
+    profiles.add_argument("--profiles-dir", type=Path, default=DEFAULT_PROFILES_DIR, help=argparse.SUPPRESS)
+
+    create = subparsers.add_parser("create-profile", help="Create a saved profile interactively")
+    create.add_argument("--profiles-dir", type=Path, default=DEFAULT_PROFILES_DIR, help=argparse.SUPPRESS)
     return parser
+
+
+def _prompt_required(prompt: str, input_fn: Callable[[str], str]) -> str:
+    while True:
+        value = input_fn(prompt).strip()
+        if value:
+            return value
+        print("Значення не може бути порожнім.")
+
+
+def _prompt_int(prompt: str, default: int, input_fn: Callable[[str], str]) -> int:
+    while True:
+        value = input_fn(f"{prompt} [{default}]: ").strip()
+        if not value:
+            return default
+        try:
+            result = int(value)
+        except ValueError:
+            result = 0
+        if result > 0:
+            return result
+        print("Введіть додатне ціле число.")
+
+
+def _prompt_bool(prompt: str, default: bool, input_fn: Callable[[str], str]) -> bool:
+    suffix = "Y/n" if default else "y/N"
+    while True:
+        value = input_fn(f"{prompt} [{suffix}]: ").strip().casefold()
+        if not value:
+            return default
+        if value in {"y", "yes", "т", "так"}:
+            return True
+        if value in {"n", "no", "н", "ні"}:
+            return False
+        print("Введіть y або n.")
+
+
+def _prompt_seniority(input_fn: Callable[[str], str]) -> tuple[str, ...]:
+    print("Seniority: 1 — Middle, 2 — Senior, 3 — Unspecified, 4 — без обмеження")
+    while True:
+        choice = input_fn("Вибір [4]: ").strip() or "4"
+        values = {
+            "1": ("middle",),
+            "2": ("senior",),
+            "3": ("unspecified",),
+            "4": (),
+        }
+        if choice in values:
+            return values[choice]
+        print("Введіть номер від 1 до 4.")
+
+
+def _create_profile_wizard(profiles_dir: Path, input_fn: Callable[[str], str]) -> Path:
+    print("\nСтворення профілю")
+    name = _prompt_required("Коротка назва (lowercase-with-hyphens): ", input_fn)
+    titles = tuple(
+        title.strip()
+        for title in _prompt_required("Професії через кому: ", input_fn).split(",")
+        if title.strip()
+    )
+    draft = ProfileDraft(
+        name=name,
+        titles=titles,
+        seniority=_prompt_seniority(input_fn),
+        country=_prompt_required("Країна: ", input_fn),
+        country_code=_prompt_required("ISO-код країни: ", input_fn),
+        location=_prompt_required("Місто або регіон: ", input_fn),
+        results_per_query=_prompt_int("Результатів на професію", 50, input_fn),
+        days_old=_prompt_int("Давність у днях", 14, input_fn),
+        distance_km=_prompt_int("Радіус у км", 80, input_fn),
+        remote_only=_prompt_bool("Тільки remote", False, input_fn),
+        max_experience_years=_prompt_int("Максимум років досвіду", 5, input_fn),
+        include_unknown=_prompt_bool("Залишати вакансії без вказаного досвіду", True, input_fn),
+    )
+    path = write_profile(draft, profiles_dir)
+    print(f"Профіль створено: {path}")
+    return path
+
+
+def _quick_search(
+    runner: Callable[..., RunSummary],
+    input_fn: Callable[[str], str],
+) -> int:
+    print("\nШвидкий одноразовий пошук")
+    titles = tuple(
+        title.strip()
+        for title in _prompt_required("Професії через кому: ", input_fn).split(",")
+        if title.strip()
+    )
+    seniority = _prompt_seniority(input_fn)
+    overrides = ConfigOverrides(
+        titles=titles,
+        seniority=seniority or None,
+        country=_prompt_required("Країна: ", input_fn),
+        country_code=_prompt_required("ISO-код країни: ", input_fn),
+        location=_prompt_required("Місто або регіон: ", input_fn),
+        results_per_query=_prompt_int("Результатів на професію", 50, input_fn),
+        days_old=_prompt_int("Давність у днях", 14, input_fn),
+        distance_km=_prompt_int("Радіус у км", 80, input_fn),
+        remote_only=_prompt_bool("Тільки remote", False, input_fn),
+        max_experience_years=_prompt_int("Максимум років досвіду", 5, input_fn),
+        include_unknown=_prompt_bool("Залишати вакансії без вказаного досвіду", True, input_fn),
+    )
+    return _print_summary(runner(DEFAULT_CONFIG, overrides=overrides))
+
+
+def _print_summary(summary: RunSummary) -> int:
+    print(json.dumps(asdict(summary), ensure_ascii=False, indent=2))
+    return 0 if summary.error_count == 0 else 1
+
+
+def _interactive_menu(
+    profiles_dir: Path,
+    runner: Callable[..., RunSummary],
+    input_fn: Callable[[str], str],
+) -> int:
+    print("\nIndeed Job Parser")
+    print("1. Запустити збережений профіль")
+    print("2. Створити новий профіль")
+    print("3. Швидкий одноразовий пошук")
+    print("4. Показати профілі")
+    print("0. Вихід")
+    choice = input_fn("Вибір: ").strip()
+    if choice == "0":
+        return 0
+    if choice == "2":
+        _create_profile_wizard(profiles_dir, input_fn)
+        return 0
+    if choice == "3":
+        return _quick_search(runner, input_fn)
+    profiles = discover_profiles(profiles_dir)
+    if choice == "4":
+        for name in profiles:
+            print(name)
+        return 0
+    if choice != "1":
+        print("Невідомий пункт меню.")
+        return 2
+    if not profiles:
+        print("Збережених профілів немає. Спочатку створіть профіль.")
+        return 2
+    names = list(profiles)
+    for index, name in enumerate(names, start=1):
+        print(f"{index}. {name}")
+    selected = input_fn("Профіль: ").strip()
+    try:
+        path = profiles[names[int(selected) - 1]]
+    except (ValueError, IndexError):
+        print("Невірний номер профілю.")
+        return 2
+    return _print_summary(runner(path, overrides=ConfigOverrides()))
 
 
 def main(
     argv: Sequence[str] | None = None,
     *,
     runner: Callable[..., RunSummary] = run_pipeline,
+    input_fn: Callable[[str], str] = input,
+    profiles_dir: Path = DEFAULT_PROFILES_DIR,
 ) -> int:
-    args = build_parser().parse_args(argv)
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if not arguments:
+        return _interactive_menu(profiles_dir, runner, input_fn)
+
+    args = build_parser().parse_args(arguments)
+    if args.command == "profiles":
+        for name in discover_profiles(args.profiles_dir):
+            print(name)
+        return 0
+    if args.command == "create-profile":
+        _create_profile_wizard(args.profiles_dir, input_fn)
+        return 0
     if args.command == "run":
+        if args.profile and args.config:
+            raise SystemExit("Use either a profile name or --config, not both")
+        config_path = (
+            resolve_profile(args.profile, args.profiles_dir)
+            if args.profile
+            else args.config or DEFAULT_CONFIG
+        )
         overrides = ConfigOverrides(
             titles=tuple(args.titles) if args.titles else None,
             exclude_titles=tuple(args.exclude_titles) if args.exclude_titles else None,
@@ -69,7 +255,5 @@ def main(
             salary_currency=args.salary_currency,
             salary_period=args.salary_period,
         )
-        summary = runner(args.config, overrides=overrides)
-        print(json.dumps(asdict(summary), ensure_ascii=False, indent=2))
-        return 0 if summary.error_count == 0 else 1
+        return _print_summary(runner(config_path, overrides=overrides))
     return 2

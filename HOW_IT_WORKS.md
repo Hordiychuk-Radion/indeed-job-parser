@@ -16,7 +16,7 @@ repository.py → SQLite
 exporter.py → CSV / JSON / report.md
 ```
 
-CLI `indeed-jobs run --config ...` лише запускає цей потік і друкує JSON-підсумок. Бізнес-логіка не захована в CLI, тому її можна тестувати або викликати з іншої програми.
+CLI, інтерактивне меню та короткі профілі лише формують шлях до TOML і runtime overrides, запускають цей потік та друкують JSON-підсумок. Бізнес-логіка не захована в CLI, тому її можна тестувати або викликати з іншої програми.
 
 ## 2. Конфіг
 
@@ -31,6 +31,10 @@ CLI `indeed-jobs run --config ...` лише запускає цей потік �
 Професія не захардкоджена в Python. `filters.include_title_patterns` визначає допустимі фрази в title, а `filters.exclude_title_patterns` — небажані рівні або ролі. Якщо include-список відсутній, ним автоматично стають `search.queries`.
 
 CLI створює `ConfigOverrides` і передає його в pipeline. Значення з CLI замінюють конфіг лише в пам'яті на час одного запуску. `--title` одночасно замінює `search.queries` та `include_title_patterns`, тому швидкий перехід із QA на Data Engineer не потребує змін Python-коду.
+
+`profiles.py` сканує `config/profiles/*.toml`. Назва файла без `.toml` є коротким ім'ям, тому `config/profiles/data-engineer-middle-de.toml` запускається як `indeed-jobs run data-engineer-middle-de`. Майстер `create-profile` генерує такий TOML, але далі він читається тим самим `config.py`; окремої прихованої системи налаштувань немає.
+
+Запуск без аргументів відкриває цифрове меню. Воно дозволяє вибрати профіль, створити профіль або виконати одноразовий пошук. Одноразовий пошук створює `ConfigOverrides` у пам'яті й не записує новий TOML.
 
 `--seniority` незалежно обмежує рівень до `middle`, `senior` або `unspecified`. Кілька значень можна передати повторенням параметра. Порожній список у TOML означає, що окремого seniority-обмеження немає й діють звичайні правила eligibility.
 
@@ -154,3 +158,24 @@ uv run indeed-jobs run \
   --days-old 7 \
   --results 50
 ```
+
+## 10. Зручні профілі та меню
+
+```bash
+# Інтерактивне меню
+uv run indeed-jobs
+
+# Список профілів
+uv run indeed-jobs profiles
+
+# Створення профілю через питання
+uv run indeed-jobs create-profile
+
+# Короткий повторний запуск
+uv run indeed-jobs run data-engineer-middle-de
+
+# Тимчасова зміна поверх профілю
+uv run indeed-jobs run data-engineer-middle-de --location Hamburg --days-old 7
+```
+
+Пріоритет не змінився: `CLI override → profile TOML → defaults`. Профіль не редагується під час запуску.
