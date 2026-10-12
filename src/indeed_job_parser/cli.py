@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable, Sequence
 
 from .config import ConfigOverrides
+from .europe import EuropeSummary, collect_europe_data_engineers
 from .pipeline import RunSummary, run_pipeline
 from .profiles import ProfileDraft, discover_profiles, resolve_profile, write_profile
 
@@ -56,6 +57,30 @@ def build_parser() -> argparse.ArgumentParser:
 
     create = subparsers.add_parser("create-profile", help="Create a saved profile interactively")
     create.add_argument("--profiles-dir", type=Path, default=DEFAULT_PROFILES_DIR, help=argparse.SUPPRESS)
+
+    europe = subparsers.add_parser(
+        "europe-data-engineer",
+        help="Collect Data Engineer vacancies across supported European Indeed countries",
+    )
+    europe.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("output/europe-data-engineer"),
+        help="Directory for snapshots and aggregate exports",
+    )
+    europe.add_argument(
+        "--limit",
+        dest="limits",
+        action="append",
+        type=int,
+        help="Results limit per country attempt; repeat for multiple attempts",
+    )
+    europe.add_argument(
+        "--days-old",
+        type=int,
+        default=3650,
+        help="Freshness window; default effectively includes all active listings",
+    )
     return parser
 
 
@@ -168,6 +193,11 @@ def _print_summary(summary: RunSummary) -> int:
     return 0 if summary.error_count == 0 else 1
 
 
+def _print_europe_summary(summary: EuropeSummary) -> int:
+    print(json.dumps(asdict(summary), ensure_ascii=False, indent=2))
+    return 0 if summary.error_count == 0 else 1
+
+
 def _interactive_menu(
     profiles_dir: Path,
     runner: Callable[..., RunSummary],
@@ -214,6 +244,7 @@ def main(
     argv: Sequence[str] | None = None,
     *,
     runner: Callable[..., RunSummary] = run_pipeline,
+    europe_runner: Callable[..., EuropeSummary] = collect_europe_data_engineers,
     input_fn: Callable[[str], str] = input,
     profiles_dir: Path = DEFAULT_PROFILES_DIR,
 ) -> int:
@@ -229,6 +260,11 @@ def main(
     if args.command == "create-profile":
         _create_profile_wizard(args.profiles_dir, input_fn)
         return 0
+    if args.command == "europe-data-engineer":
+        limits = tuple(args.limits) if args.limits else (100, 500, 1000)
+        return _print_europe_summary(
+            europe_runner(args.output_dir, limits=limits, days_old=args.days_old)
+        )
     if args.command == "run":
         if args.profile and args.config:
             raise SystemExit("Use either a profile name or --config, not both")

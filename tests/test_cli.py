@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from indeed_job_parser.cli import main
+from indeed_job_parser.europe import EuropeSummary
 from indeed_job_parser.pipeline import RunSummary
 
 
@@ -232,3 +233,60 @@ def test_menu_runs_quick_search_without_saving_profile(tmp_path: Path):
     assert overrides.country == "Germany"
     assert overrides.remote_only is True
     assert overrides.include_unknown is False
+
+
+def test_cli_runs_europe_data_engineer_collection(tmp_path: Path, capsys):
+    received = {}
+
+    def fake_europe_runner(output_dir, *, limits, days_old):
+        received["output_dir"] = output_dir
+        received["limits"] = limits
+        received["days_old"] = days_old
+        return EuropeSummary(
+            countries_completed=32,
+            raw_unique_jobs=12018,
+            selected_data_engineers=2331,
+            error_count=0,
+            output_dir=str(output_dir),
+        )
+
+    output_dir = tmp_path / "europe"
+    exit_code = main(
+        [
+            "europe-data-engineer",
+            "--output-dir",
+            str(output_dir),
+            "--limit",
+            "100",
+            "--limit",
+            "500",
+            "--days-old",
+            "3650",
+        ],
+        europe_runner=fake_europe_runner,
+    )
+
+    assert exit_code == 0
+    assert received == {
+        "output_dir": output_dir,
+        "limits": (100, 500),
+        "days_old": 3650,
+    }
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["selected_data_engineers"] == 2331
+
+
+def test_europe_cli_uses_three_volume_attempts_by_default(tmp_path: Path):
+    received = {}
+
+    def fake_europe_runner(output_dir, *, limits, days_old):
+        received["limits"] = limits
+        return EuropeSummary(32, 0, 0, 0, str(output_dir))
+
+    exit_code = main(
+        ["europe-data-engineer", "--output-dir", str(tmp_path)],
+        europe_runner=fake_europe_runner,
+    )
+
+    assert exit_code == 0
+    assert received["limits"] == (100, 500, 1000)
