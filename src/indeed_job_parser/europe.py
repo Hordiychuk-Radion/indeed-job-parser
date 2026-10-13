@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any, Callable, Iterable
 from .collector import collect_indeed
 from .config import SearchConfig
 from .normalizer import normalize_record
+from .stack import extract_stack, flatten_stack
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +107,7 @@ def _write_json(path: Path, payload: Any) -> None:
 
 
 def _selected_row(job: dict[str, Any]) -> dict[str, Any]:
+    stack = extract_stack(f"{job['title']}\n{job['description']}")
     return {
         "title": job["title"],
         "company": job["company"],
@@ -114,6 +117,8 @@ def _selected_row(job: dict[str, Any]) -> dict[str, Any]:
         "employment_type": job["employment_type"],
         "is_remote": job["is_remote"],
         "url": job["canonical_url"],
+        "stack": stack,
+        "stack_flat": flatten_stack(stack),
     }
 
 
@@ -218,6 +223,9 @@ def collect_europe_data_engineers(
     all_jobs = list(aggregate.values())
     selected_jobs = [job for job in all_jobs if _DATA_ENGINEER_RE.search(job["title"])]
     selected_rows = [_selected_row(job) for job in selected_jobs]
+    technology_counts = Counter(
+        technology for row in selected_rows for technology in row["stack_flat"]
+    )
     _write_json(directory / "jobs-all.json", all_jobs)
     _write_json(directory / "jobs-selected.json", selected_rows)
     summary_payload = {
@@ -225,6 +233,7 @@ def collect_europe_data_engineers(
         "countries_completed": len(country_list),
         "raw_unique_jobs": len(all_jobs),
         "selected_data_engineers": len(selected_rows),
+        "technology_counts": dict(technology_counts.most_common()),
         "error_count": error_count,
         "countries": country_summaries,
     }
@@ -235,11 +244,22 @@ def collect_europe_data_engineers(
         "",
         f"Total: **{len(selected_rows)}** vacancies.",
         "",
+        "## Technology stack",
+        "",
     ]
+    if technology_counts:
+        lines.extend(
+            f"- {technology}: **{count}**"
+            for technology, count in technology_counts.most_common()
+        )
+    else:
+        lines.append("- No recognized technologies")
+    lines.extend(["", "## Vacancies", ""])
     for row in selected_rows:
         lines.append(
             f"- [{row['title']}]({row['url']}) — {row['company'] or 'Company not specified'}; "
-            f"{row['location'] or 'Location not specified'}"
+            f"{row['location'] or 'Location not specified'}; "
+            f"Stack: {', '.join(row['stack_flat']) or 'not recognized'}"
         )
     (directory / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return EuropeSummary(

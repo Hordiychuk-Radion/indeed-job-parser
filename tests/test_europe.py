@@ -23,7 +23,7 @@ def test_europe_collection_keeps_attempt_snapshots_and_exports_clickable_selecte
                         "title": "Senior Data Engineer",
                         "company": "Example",
                         "location": "Berlin, DE",
-                        "description": "Build data pipelines",
+                        "description": "Build Python and SQL pipelines with Airflow on AWS",
                         "job_url": "https://de.indeed.com/viewjob?jk=data-1&utm_source=test",
                     },
                     {
@@ -45,7 +45,7 @@ def test_europe_collection_keeps_attempt_snapshots_and_exports_clickable_selecte
                     "title": "Senior Data Engineer",
                     "company": "Example",
                     "location": "Berlin, DE",
-                    "description": "Build data pipelines",
+                    "description": "Build Python and SQL pipelines with Airflow on AWS",
                     "job_url": "https://de.indeed.com/viewjob?jk=data-1",
                 }
             ]
@@ -84,10 +84,31 @@ def test_europe_collection_keeps_attempt_snapshots_and_exports_clickable_selecte
             "employment_type": None,
             "is_remote": None,
             "url": "https://de.indeed.com/viewjob?jk=data-1",
+            "stack": {
+                "languages": ["Python", "SQL"],
+                "cloud": ["AWS"],
+                "data_platforms": [],
+                "processing_streaming": [],
+                "orchestration_transformation": ["Apache Airflow"],
+                "databases": [],
+                "devops": [],
+                "analytics_bi": [],
+            },
+            "stack_flat": ["Python", "SQL", "AWS", "Apache Airflow"],
         }
     ]
     report = (tmp_path / "report.md").read_text()
+    summary_payload = json.loads((tmp_path / "summary.json").read_text())
+    assert summary_payload["technology_counts"] == {
+        "Python": 1,
+        "SQL": 1,
+        "AWS": 1,
+        "Apache Airflow": 1,
+    }
+    assert "## Technology stack" in report
+    assert "Python: **1**" in report
     assert "[Senior Data Engineer](https://de.indeed.com/viewjob?jk=data-1)" in report
+    assert "Stack: Python, SQL, AWS, Apache Airflow" in report
     assert "Prison Officer" not in report
 
 

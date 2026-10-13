@@ -21,6 +21,7 @@ TOML-конфіг
 - `config.py` — читає й перевіряє TOML-конфіг;
 - `collector.py` — викликає JobSpy лише для Indeed;
 - `normalizer.py` — перетворює результат JobSpy у стабільну модель;
+- `stack.py` — детерміновано виділяє технології з title та description у категорії;
 - `eligibility.py` — перевіряє роль, рівень і вимоги до досвіду;
 - `repository.py` — зберігає поточні вакансії та історію запусків у SQLite;
 - `exporter.py` — створює CSV, JSON і `report.md`;
@@ -143,11 +144,16 @@ uv run indeed-jobs europe-data-engineer \
 Europe-результати:
 
 - `jobs-all.json` — дедуплікована сира пошукова видача після нормалізації;
-- `jobs-selected.json` — тільки multilingual title-збіги Data Engineer, кожен з явним полем `url`;
-- `report.md` — клікабельний список вакансій;
-- `summary.json` — кількості та помилки по країнах;
+- `jobs-selected.json` — тільки multilingual title-збіги Data Engineer; кожен запис має явний `url`, категоризований `stack` і плоский `stack_flat`;
+- `report.md` — клікабельний список вакансій і частоти технологій, побудовані з `stack_flat`;
+- `summary.json` — кількості, помилки по країнах і агрегований `technology_counts`;
 - `snapshots/<country>/<run-id>/limit-*.json` — повна відповідь кожної спроби;
 - `snapshots/<country>/largest-batch.json` — найбільша збережена вибірка країни.
+
+`stack` має стабільні категорії: `languages`, `cloud`, `data_platforms`,
+`processing_streaming`, `orchestration_transformation`, `databases`, `devops` і
+`analytics_bi`. Пошук словниковий і не вигадує технології, яких немає в тексті;
+невідомі або не згадані інструменти залишають відповідну категорію порожньою.
 
 Результати:
 
