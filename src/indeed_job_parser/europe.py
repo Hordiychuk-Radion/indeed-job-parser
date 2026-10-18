@@ -11,10 +11,16 @@ from typing import Any, Callable, Iterable
 
 from .collector import collect_indeed
 from .config import SearchConfig
+from .eligibility import extract_required_years
 from .models import JobRecord
 from .normalizer import normalize_record
 from .repository import JobRepository
-from .stack import extract_stack, flatten_stack
+from .stack import (
+    extract_concept_mentions,
+    extract_stack,
+    extract_technology_mentions,
+    flatten_stack,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,7 +232,12 @@ def collect_europe_data_engineers(
         )
 
     all_jobs = list(aggregate.values())
-    selected_jobs = [job for job in all_jobs if _DATA_ENGINEER_RE.search(job["title"])]
+    title_matched_jobs = [job for job in all_jobs if _DATA_ENGINEER_RE.search(job["title"])]
+    selected_jobs = [
+        job
+        for job in title_matched_jobs
+        if (extract_required_years(str(job.get("description") or "")) or 0) <= 5
+    ]
     selected_rows = [_selected_row(job) for job in selected_jobs]
     technology_counts = Counter(
         technology for row in selected_rows for technology in row["stack_flat"]
@@ -250,10 +261,20 @@ def collect_europe_data_engineers(
         try:
             scope_memberships: list[tuple[int, str, str]] = []
             for job_payload in selected_jobs:
+                required_years = extract_required_years(
+                    str(job_payload.get("description") or "")
+                )
+                eligibility = "eligible" if required_years is not None else "unknown"
+                eligibility_reason = (
+                    "experience_within_limit"
+                    if required_years is not None
+                    else "experience_not_stated"
+                )
                 job = replace(
                     JobRecord(**job_payload),
-                    eligibility="eligible",
-                    eligibility_reason="title_matches_data_engineer",
+                    eligibility=eligibility,
+                    eligibility_reason=eligibility_reason,
+                    required_experience_years=required_years,
                 )
                 job_id = repository.save_job(
                     database_run_id,
@@ -264,21 +285,35 @@ def collect_europe_data_engineers(
                     },
                     commit=False,
                 )
-                repository.replace_job_technologies(
+                source_text = f"{job.title}\n{job.description}"
+                repository.replace_job_technology_mentions(
                     job_id,
-                    extract_stack(f"{job.title}\n{job.description}"),
+                    extract_technology_mentions(source_text),
+                    commit=False,
+                )
+                repository.replace_job_concepts(
+                    job_id,
+                    extract_concept_mentions(source_text),
                     commit=False,
                 )
                 scope_memberships.append(
                     (job_id, job.eligibility, job.eligibility_reason)
                 )
             repository.replace_scope_jobs(scope_key, scope_memberships, commit=False)
+            rows_eligible = sum(
+                eligibility == "eligible"
+                for _, eligibility, _ in scope_memberships
+            )
+            rows_unknown = sum(
+                eligibility == "unknown"
+                for _, eligibility, _ in scope_memberships
+            )
             repository.finish_run(
                 database_run_id,
                 status="succeeded",
                 rows_received=len(all_jobs),
-                rows_eligible=len(selected_jobs),
-                rows_unknown=0,
+                rows_eligible=rows_eligible,
+                rows_unknown=rows_unknown,
                 rows_rejected=len(all_jobs) - len(selected_jobs),
                 error_count=error_count,
             )

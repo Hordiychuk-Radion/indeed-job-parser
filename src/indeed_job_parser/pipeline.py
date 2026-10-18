@@ -11,6 +11,7 @@ from .exporter import export_jobs
 from .models import JobRecord
 from .normalizer import normalize_record
 from .repository import JobRepository
+from .stack import extract_concept_mentions, extract_technology_mentions
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +83,17 @@ def run_pipeline(
                 job = _apply_decision(job, config)
                 processed.append(job)
                 job_id = repository.save_job(run_id, job, raw, commit=False)
+                source_text = f"{job.title}\n{job.description}"
+                repository.replace_job_technology_mentions(
+                    job_id,
+                    extract_technology_mentions(source_text),
+                    commit=False,
+                )
+                repository.replace_job_concepts(
+                    job_id,
+                    extract_concept_mentions(source_text),
+                    commit=False,
+                )
                 scope_memberships.append(
                     (job_id, job.eligibility, job.eligibility_reason)
                 )

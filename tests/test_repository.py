@@ -5,6 +5,7 @@ from pathlib import Path
 
 from indeed_job_parser.models import JobRecord
 from indeed_job_parser.repository import JobRepository, inspect_database
+from indeed_job_parser.stack import ConceptMention, TechnologyMention
 
 
 def sample_job() -> JobRecord:
@@ -202,6 +203,74 @@ def test_replaces_structured_job_technologies(tmp_path: Path):
     ]
 
 
+def test_persists_contextual_technology_and_concept_evidence(tmp_path: Path):
+    with JobRepository(tmp_path / "jobs.db") as repository:
+        run_id = repository.start_run({"country": "Czech Republic"})
+        job_id = repository.save_job(run_id, sample_job(), {"raw": 1})
+        repository.replace_job_technology_mentions(
+            job_id,
+            [
+                TechnologyMention(
+                    category="data_platforms",
+                    technology="Databricks",
+                    requirement_type="required",
+                    section="Requirements",
+                    evidence_text="Databricks experience is required.",
+                ),
+                TechnologyMention(
+                    category="data_platforms",
+                    technology="Snowflake",
+                    requirement_type="alternative",
+                    section="Requirements",
+                    evidence_text="Or relevant experience with Snowflake.",
+                ),
+            ],
+        )
+        repository.replace_job_concepts(
+            job_id,
+            [
+                ConceptMention(
+                    concept="Data Quality",
+                    requirement_type="mentioned",
+                    section="Responsibilities",
+                    evidence_text="Improve data quality.",
+                )
+            ],
+        )
+        technologies = repository.connection.execute(
+            "SELECT category, technology, requirement_type, section, evidence_text "
+            "FROM job_technologies ORDER BY technology"
+        ).fetchall()
+        concepts = repository.connection.execute(
+            "SELECT concept, requirement_type, section, evidence_text FROM job_concepts"
+        ).fetchall()
+
+    assert [tuple(row) for row in technologies] == [
+        (
+            "data_platforms",
+            "Databricks",
+            "required",
+            "Requirements",
+            "Databricks experience is required.",
+        ),
+        (
+            "data_platforms",
+            "Snowflake",
+            "alternative",
+            "Requirements",
+            "Or relevant experience with Snowflake.",
+        ),
+    ]
+    assert [tuple(row) for row in concepts] == [
+        (
+            "Data Quality",
+            "mentioned",
+            "Responsibilities",
+            "Improve data quality.",
+        )
+    ]
+
+
 def test_can_batch_job_and_stack_writes_in_one_transaction(tmp_path: Path):
     with JobRepository(tmp_path / "jobs.db") as repository:
         run_id = repository.start_run({"country": "Czech Republic"})
@@ -261,9 +330,35 @@ def test_inspects_database_with_descriptions_and_stack(tmp_path: Path):
     with JobRepository(database) as repository:
         run_id = repository.start_run({"queries": ["QA Engineer"]})
         job_id = repository.save_job(run_id, sample_job(), {"raw": 1})
-        repository.replace_job_technologies(
+        repository.replace_job_technology_mentions(
             job_id,
-            {"languages": ["Python"], "cloud": ["AWS"]},
+            [
+                TechnologyMention(
+                    category="languages",
+                    technology="Python",
+                    requirement_type="required",
+                    section="Requirements",
+                    evidence_text="Python is required.",
+                ),
+                TechnologyMention(
+                    category="cloud",
+                    technology="AWS",
+                    requirement_type="preferred",
+                    section="Nice to Have",
+                    evidence_text="AWS is a plus.",
+                ),
+            ],
+        )
+        repository.replace_job_concepts(
+            job_id,
+            [
+                ConceptMention(
+                    concept="Data Quality",
+                    requirement_type="mentioned",
+                    section="Responsibilities",
+                    evidence_text="Improve data quality.",
+                )
+            ],
         )
         repository.ensure_scope(
             "country:CZ", "country", country_code="CZ", label="Czech Republic"
@@ -304,6 +399,30 @@ def test_inspects_database_with_descriptions_and_stack(tmp_path: Path):
         "cloud": ["AWS"],
         "languages": ["Python"],
     }
+    assert payload["recent_jobs"][0]["technology_mentions"] == [
+        {
+            "category": "cloud",
+            "technology": "AWS",
+            "requirement_type": "preferred",
+            "section": "Nice to Have",
+            "evidence_text": "AWS is a plus.",
+        },
+        {
+            "category": "languages",
+            "technology": "Python",
+            "requirement_type": "required",
+            "section": "Requirements",
+            "evidence_text": "Python is required.",
+        },
+    ]
+    assert payload["recent_jobs"][0]["concepts"] == [
+        {
+            "concept": "Data Quality",
+            "requirement_type": "mentioned",
+            "section": "Responsibilities",
+            "evidence_text": "Improve data quality.",
+        }
+    ]
 
 
 def test_inspection_counts_technology_when_any_scope_selects_the_job(tmp_path: Path):

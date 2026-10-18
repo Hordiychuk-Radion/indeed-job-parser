@@ -48,7 +48,11 @@ def test_pipeline_persists_all_decisions_and_exports_selected_rows(tmp_path: Pat
                 "company": "A",
                 "location": "Prague",
                 "job_url": "https://cz.indeed.com/viewjob?jk=eligible",
-                "description": "Automation testing",
+                "description": (
+                    "Requirements\nPython is required.\n"
+                    "Nice to have\nAWS is a plus.\n"
+                    "Responsibilities\nImprove data quality with ETL pipelines."
+                ),
                 "min_amount": 70000,
                 "max_amount": 90000,
                 "currency": "CZK",
@@ -105,6 +109,16 @@ def test_pipeline_persists_all_decisions_and_exports_selected_rows(tmp_path: Pat
     assert database.execute(
         "SELECT eligibility_reason FROM jobs WHERE source_job_id='wrong-period'"
     ).fetchone()[0] == "salary_period_mismatch"
+    assert database.execute(
+        "SELECT technology, requirement_type FROM job_technologies "
+        "JOIN jobs ON jobs.id=job_technologies.job_id "
+        "WHERE jobs.source_job_id='eligible' ORDER BY technology"
+    ).fetchall() == [("AWS", "preferred"), ("Python", "required")]
+    assert database.execute(
+        "SELECT concept, requirement_type FROM job_concepts "
+        "JOIN jobs ON jobs.id=job_concepts.job_id "
+        "WHERE jobs.source_job_id='eligible' ORDER BY concept"
+    ).fetchall() == [("Data Quality", "mentioned"), ("ETL/ELT", "mentioned")]
     database.close()
     selected = json.loads((tmp_path / "output/jobs-selected.json").read_text())
     assert [row["company"] for row in selected] == ["A", "B"]

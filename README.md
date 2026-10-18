@@ -156,6 +156,24 @@ Europe-результати:
 `processing_streaming`, `orchestration_transformation`, `databases`, `devops` і
 `analytics_bi`. Пошук словниковий і не вигадує технології, яких немає в тексті;
 невідомі або не згадані інструменти залишають відповідну категорію порожньою.
+У SQLite кожен рядок `job_technologies` також має `requirement_type`
+(`required`, `preferred`, `alternative` або `mentioned`), `section` і точний
+`evidence_text`. Загальні поняття на кшталт ETL/ELT, NLP, Data Quality та
+Lakehouse зберігаються окремо в `job_concepts`, щоб не змішувати їх з інструментами.
+
+Приклад перевірки обов'язкового та бажаного стеку:
+
+```sql
+SELECT j.title, jt.technology, jt.requirement_type, jt.section, jt.evidence_text
+FROM europe_jobs AS j
+JOIN job_technologies AS jt ON jt.job_id = j.id
+WHERE j.id = 123
+ORDER BY jt.requirement_type, jt.category, jt.technology;
+```
+
+Europe-вибірка відкидає title-збіги з явно зазначеною вимогою понад 5 років.
+Якщо вимога до досвіду не знайдена, вакансія залишається у scope зі статусом
+`unknown`, а не отримує вигадане значення.
 
 Переглянути базу без написання SQL:
 
@@ -166,7 +184,8 @@ uv run indeed-jobs inspect-db \
 ```
 
 Команда друкує JSON із кількістю вакансій, запусків і спостережень, розподілом
-eligibility, частотою технологій та останніми вакансіями разом з description і stack.
+eligibility, частотою технологій та останніми вакансіями разом з description,
+stack, contextual technology mentions і concepts.
 Для графічного перегляду той самий `jobs.db` можна відкрити у DB Browser for SQLite.
 
 Результати:

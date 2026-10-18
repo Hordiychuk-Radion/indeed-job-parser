@@ -81,15 +81,19 @@ def test_europe_collection_keeps_attempt_snapshots_and_exports_clickable_selecte
             "JOIN jobs ON jobs.id = job_technologies.job_id "
             "WHERE jobs.source_job_id='data-1' ORDER BY category, technology"
         ).fetchall()
+        run_counts = connection.execute(
+            "SELECT rows_eligible, rows_unknown, rows_rejected FROM ingestion_runs"
+        ).fetchone()
     assert stored == [
         (
             "Senior Data Engineer",
             "Build Python and SQL pipelines with Airflow on AWS",
-            "eligible",
-            "title_matches_data_engineer",
+            "unknown",
+            "experience_not_stated",
         ),
     ]
     assert observations == 1
+    assert tuple(run_counts) == (0, 1, 1)
     assert technologies == [
         ("cloud", "AWS"),
         ("languages", "Python"),
@@ -140,6 +144,58 @@ def test_europe_collection_keeps_attempt_snapshots_and_exports_clickable_selecte
     assert "[Senior Data Engineer](https://de.indeed.com/viewjob?jk=data-1)" in report
     assert "Stack: Python, SQL, AWS, Apache Airflow" in report
     assert "Prison Officer" not in report
+
+
+def test_europe_collection_excludes_title_match_above_experience_limit(tmp_path: Path):
+    def fake_scrape(**_kwargs):
+        return pd.DataFrame(
+            [
+                {
+                    "id": "within-limit",
+                    "site": "indeed",
+                    "title": "Senior Data Engineer",
+                    "company": "Keep",
+                    "location": "London",
+                    "description": (
+                        "Requirements\nRequires 5+ years of experience with Python.\n"
+                        "Nice to Have\nSnowflake is a plus.\n"
+                        "Responsibilities\nBuild ETL pipelines and improve data quality."
+                    ),
+                    "job_url": "https://uk.indeed.com/viewjob?jk=within-limit",
+                },
+                {
+                    "id": "above-limit",
+                    "site": "indeed",
+                    "title": "Senior Data Engineer",
+                    "company": "Reject",
+                    "location": "London",
+                    "description": "Requires 7+ years of professional experience with SQL.",
+                    "job_url": "https://uk.indeed.com/viewjob?jk=above-limit",
+                },
+            ]
+        )
+
+    summary = collect_europe_data_engineers(
+        tmp_path,
+        countries=(EuropeCountry("United Kingdom", "GB"),),
+        limits=(2,),
+        scrape_fn=fake_scrape,
+        run_id="experience-filter",
+    )
+
+    assert summary.raw_unique_jobs == 2
+    assert summary.selected_data_engineers == 1
+    with sqlite3.connect(summary.database_path) as connection:
+        assert connection.execute(
+            "SELECT source_job_id, required_experience_years FROM europe_jobs"
+        ).fetchall() == [("within-limit", 5)]
+        assert connection.execute(
+            "SELECT technology, requirement_type FROM job_technologies "
+            "ORDER BY technology"
+        ).fetchall() == [("Python", "required"), ("Snowflake", "preferred")]
+        assert connection.execute(
+            "SELECT concept, requirement_type FROM job_concepts ORDER BY concept"
+        ).fetchall() == [("Data Quality", "mentioned"), ("ETL/ELT", "mentioned")]
 
 
 def test_europe_collection_replaces_only_europe_scope_in_shared_database(tmp_path: Path):

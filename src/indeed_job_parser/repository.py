@@ -5,9 +5,10 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from .models import JobRecord
+from .stack import ConceptMention, TechnologyMention
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS ingestion_runs (
@@ -72,7 +73,19 @@ CREATE TABLE IF NOT EXISTS job_technologies (
     job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
     category TEXT NOT NULL,
     technology TEXT NOT NULL,
+    requirement_type TEXT NOT NULL DEFAULT 'mentioned',
+    section TEXT,
+    evidence_text TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (job_id, category, technology)
+);
+
+CREATE TABLE IF NOT EXISTS job_concepts (
+    job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    concept TEXT NOT NULL,
+    requirement_type TEXT NOT NULL DEFAULT 'mentioned',
+    section TEXT,
+    evidence_text TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (job_id, concept)
 );
 
 CREATE TABLE IF NOT EXISTS scope_jobs (
@@ -89,6 +102,7 @@ CREATE INDEX IF NOT EXISTS jobs_published_idx ON jobs(published_at);
 CREATE INDEX IF NOT EXISTS jobs_eligibility_idx ON jobs(eligibility);
 CREATE INDEX IF NOT EXISTS observations_run_idx ON job_observations(run_id);
 CREATE INDEX IF NOT EXISTS technologies_name_idx ON job_technologies(technology);
+CREATE INDEX IF NOT EXISTS concepts_name_idx ON job_concepts(concept);
 CREATE INDEX IF NOT EXISTS scope_jobs_job_idx ON scope_jobs(job_id);
 
 CREATE VIEW IF NOT EXISTS europe_jobs AS
@@ -137,6 +151,20 @@ class JobRepository:
         }
         if "scope_key" not in run_columns:
             self.connection.execute("ALTER TABLE ingestion_runs ADD COLUMN scope_key TEXT")
+        technology_columns = {
+            row[1] for row in self.connection.execute("PRAGMA table_info(job_technologies)")
+        }
+        if "requirement_type" not in technology_columns:
+            self.connection.execute(
+                "ALTER TABLE job_technologies ADD COLUMN requirement_type TEXT "
+                "NOT NULL DEFAULT 'mentioned'"
+            )
+        if "section" not in technology_columns:
+            self.connection.execute("ALTER TABLE job_technologies ADD COLUMN section TEXT")
+        if "evidence_text" not in technology_columns:
+            self.connection.execute(
+                "ALTER TABLE job_technologies ADD COLUMN evidence_text TEXT NOT NULL DEFAULT ''"
+            )
         self.connection.commit()
 
     def __enter__(self) -> "JobRepository":
@@ -301,6 +329,63 @@ class JobRepository:
         if commit:
             self.connection.commit()
 
+    def replace_job_technology_mentions(
+        self,
+        job_id: int,
+        mentions: Sequence[TechnologyMention],
+        *,
+        commit: bool = True,
+    ) -> None:
+        self.connection.execute("DELETE FROM job_technologies WHERE job_id=?", (job_id,))
+        self.connection.executemany(
+            """
+            INSERT INTO job_technologies (
+                job_id, category, technology, requirement_type, section, evidence_text
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    job_id,
+                    mention.category,
+                    mention.technology,
+                    mention.requirement_type,
+                    mention.section,
+                    mention.evidence_text,
+                )
+                for mention in mentions
+            ],
+        )
+        if commit:
+            self.connection.commit()
+
+    def replace_job_concepts(
+        self,
+        job_id: int,
+        mentions: Sequence[ConceptMention],
+        *,
+        commit: bool = True,
+    ) -> None:
+        self.connection.execute("DELETE FROM job_concepts WHERE job_id=?", (job_id,))
+        self.connection.executemany(
+            """
+            INSERT INTO job_concepts (
+                job_id, concept, requirement_type, section, evidence_text
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    job_id,
+                    mention.concept,
+                    mention.requirement_type,
+                    mention.section,
+                    mention.evidence_text,
+                )
+                for mention in mentions
+            ],
+        )
+        if commit:
+            self.connection.commit()
+
     def finish_run(
         self,
         run_id: str,
@@ -387,14 +472,38 @@ def inspect_database(database_path: str | Path, *, limit: int = 10) -> dict[str,
         recent_jobs = []
         for row in job_rows:
             stack: dict[str, list[str]] = {}
+            technology_mentions = []
             for technology_row in connection.execute(
-                "SELECT category, technology FROM job_technologies "
+                "SELECT category, technology, requirement_type, section, evidence_text "
+                "FROM job_technologies "
                 "WHERE job_id=? ORDER BY category, technology",
                 (row["id"],),
             ).fetchall():
                 stack.setdefault(technology_row["category"], []).append(
                     technology_row["technology"]
                 )
+                technology_mentions.append(
+                    {
+                        "category": technology_row["category"],
+                        "technology": technology_row["technology"],
+                        "requirement_type": technology_row["requirement_type"],
+                        "section": technology_row["section"],
+                        "evidence_text": technology_row["evidence_text"],
+                    }
+                )
+            concepts = [
+                {
+                    "concept": concept_row["concept"],
+                    "requirement_type": concept_row["requirement_type"],
+                    "section": concept_row["section"],
+                    "evidence_text": concept_row["evidence_text"],
+                }
+                for concept_row in connection.execute(
+                    "SELECT concept, requirement_type, section, evidence_text "
+                    "FROM job_concepts WHERE job_id=? ORDER BY concept",
+                    (row["id"],),
+                ).fetchall()
+            ]
             recent_jobs.append(
                 {
                     "source_job_id": row["source_job_id"],
@@ -409,6 +518,8 @@ def inspect_database(database_path: str | Path, *, limit: int = 10) -> dict[str,
                     "eligibility_reason": row["eligibility_reason"],
                     "last_seen_at": row["last_seen_at"],
                     "stack": stack,
+                    "technology_mentions": technology_mentions,
+                    "concepts": concepts,
                 }
             )
     return {

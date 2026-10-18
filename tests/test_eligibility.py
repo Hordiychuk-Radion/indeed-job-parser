@@ -1,4 +1,6 @@
-from indeed_job_parser.eligibility import evaluate_job
+import pytest
+
+from indeed_job_parser.eligibility import evaluate_job, extract_required_years
 
 
 def row(title: str, description: str = "") -> dict:
@@ -10,6 +12,26 @@ def test_rejects_explicit_requirement_above_five_years():
     assert decision.status == "rejected"
     assert decision.reason == "experience_above_limit"
     assert decision.required_years == 6
+
+
+def test_extracts_markdown_escaped_plus_in_experience_requirement():
+    assert extract_required_years(r"Experience: 7\+ years of professional experience.") == 7
+
+
+@pytest.mark.parametrize(
+    ("description", "expected"),
+    [
+        ("Vous disposez de 5 ans minimum d’expérience.", 5),
+        ("Minimum 6 ans d'expérience professionnelle.", 6),
+        ("Mindestens 6 Jahre Berufserfahrung erforderlich.", 6),
+        ("Mínimo 7 años de experiencia profesional.", 7),
+        ("Almeno 4 anni di esperienza professionale.", 4),
+        ("Mínimo de 3 anos de experiência profissional.", 3),
+        ("Minimum 6 lat doświadczenia zawodowego.", 6),
+    ],
+)
+def test_extracts_localized_experience_requirements(description: str, expected: int):
+    assert extract_required_years(description) == expected
 
 
 def test_rejects_senior_title_without_explicit_years():

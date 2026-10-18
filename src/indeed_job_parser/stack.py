@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 
 STACK_CATALOG: Mapping[str, tuple[tuple[str, str], ...]] = {
@@ -73,10 +74,202 @@ _COMPILED_CATALOG = {
     for category, entries in STACK_CATALOG.items()
 }
 
+CONCEPT_CATALOG: tuple[tuple[str, str], ...] = (
+    ("ETL/ELT", r"\b(?:etl|elt)(?:\s*/\s*(?:etl|elt))?\b"),
+    ("Data Quality", r"\bdata quality\b|\bqualit[ée] des donn[ée]es\b"),
+    ("Data Modeling", r"\bdata modell?ing\b|\bmod[ée]lisation des donn[ée]es\b"),
+    ("Lakehouse", r"\blakehouse\b"),
+    ("Data Warehouse", r"\bdata warehouse\b|\bdata warehousing\b"),
+    ("Data Lake", r"\bdata lake\b"),
+    ("CI/CD", r"\bci\s*/\s*cd\b|\bcontinuous integration\b"),
+    ("NLP", r"\bnlp\b|\bnatural language processing\b|\btraitement automatique du langage\b"),
+    ("Machine Learning", r"\bmachine learning\b"),
+    ("Data Governance", r"\bdata governance\b|\bgouvernance des donn[ée]es\b"),
+)
+_COMPILED_CONCEPTS = tuple(
+    (name, re.compile(pattern, re.IGNORECASE)) for name, pattern in CONCEPT_CATALOG
+)
+
+_REQUIREMENT_HEADINGS = re.compile(
+    r"^(?:requirements?|required qualifications?|qualifications?|profile required|"
+    r"profil recherch[ée]|comp[ée]tences requises)$",
+    re.IGNORECASE,
+)
+_PREFERRED_HEADINGS = re.compile(
+    r"^(?:nice to have|bonus points?|preferred qualifications?|preferred|assets?|atouts?)$",
+    re.IGNORECASE,
+)
+_RESPONSIBILITY_HEADINGS = re.compile(
+    r"^(?:responsibilities|responsabilit[ée]s|missions?|the role|le poste)$",
+    re.IGNORECASE,
+)
+_PREFERRED_CUES = re.compile(
+    r"\b(?:nice to have|preferred|would be a plus|is a plus|bonus|advantageous|"
+    r"constitue un atout|serait un plus|id[ée]alement|souhait[ée])\b",
+    re.IGNORECASE,
+)
+_REQUIRED_CUES = re.compile(
+    r"\b(?:required|must have|must possess|strong (?:knowledge|experience)|"
+    r"proficien(?:t|cy)|hands-on experience|minimum \d+|\d+\+? years? of)\b",
+    re.IGNORECASE,
+)
+_ALTERNATIVE_CUES = re.compile(
+    r"\b(?:or relevant experience with|relevant alternatives?|acceptable alternatives?|"
+    r"substitute such as|one of (?:the )?following)\b",
+    re.IGNORECASE,
+)
+_MENTION_PRIORITY = {"mentioned": 1, "alternative": 2, "preferred": 3, "required": 4}
+
+
+@dataclass(frozen=True, slots=True)
+class TechnologyMention:
+    category: str
+    technology: str
+    requirement_type: str
+    section: str | None
+    evidence_text: str
+
+
+@dataclass(frozen=True, slots=True)
+class ConceptMention:
+    concept: str
+    requirement_type: str
+    section: str | None
+    evidence_text: str
+
+
+def _clean_heading(line: str) -> str:
+    return re.sub(r"^[\s#*_\-]+|[\s:*_\-]+$", "", line).strip()
+
+
+def _heading_type(line: str) -> str | None:
+    heading = _clean_heading(line)
+    if _REQUIREMENT_HEADINGS.fullmatch(heading):
+        return "required"
+    if _PREFERRED_HEADINGS.fullmatch(heading):
+        return "preferred"
+    if _RESPONSIBILITY_HEADINGS.fullmatch(heading):
+        return "mentioned"
+    return None
+
+
+def _iter_evidence(text: str) -> list[tuple[str | None, str, str | None]]:
+    section: str | None = None
+    section_type: str | None = None
+    buffer: list[str] = []
+    evidence: list[tuple[str | None, str, str | None]] = []
+
+    def flush() -> None:
+        if buffer:
+            evidence.append((section, " ".join(buffer).strip(), section_type))
+            buffer.clear()
+
+    for raw_line in (text or "").splitlines():
+        line = raw_line.strip().strip("* ")
+        if not line:
+            flush()
+            continue
+        heading_type = _heading_type(line)
+        if heading_type is not None:
+            flush()
+            section = _clean_heading(line)
+            section_type = heading_type
+            continue
+        inline_heading, separator, remainder = line.partition(":")
+        inline_type = _heading_type(inline_heading) if separator else None
+        if inline_type is not None and remainder.strip():
+            flush()
+            section = _clean_heading(inline_heading)
+            section_type = inline_type
+            line = remainder.strip()
+        buffer.append(line)
+        if re.search(r"[.!?;:]$", line):
+            flush()
+    flush()
+    return evidence
+
+
+def _classify_mention(
+    evidence: str,
+    match_start: int,
+    section_type: str | None,
+) -> str:
+    alternative = _ALTERNATIVE_CUES.search(evidence)
+    if alternative:
+        alternative_start = alternative.start()
+        if "relevant alternative" in alternative.group(0).casefold():
+            with_matches = list(
+                re.finditer(r"\bwith\b", evidence[: alternative.start()], re.IGNORECASE)
+            )
+            if with_matches:
+                alternative_start = with_matches[-1].end()
+        if "one of" in alternative.group(0).casefold() or match_start >= alternative_start:
+            return "alternative"
+    if section_type == "preferred" or _PREFERRED_CUES.search(evidence):
+        return "preferred"
+    if section_type == "required" or _REQUIRED_CUES.search(evidence):
+        return "required"
+    return "mentioned"
+
+
+def _without_links_and_emails(evidence: str) -> str:
+    return re.sub(
+        r"https?://\S+|\b[^\s@]+@[^\s@]+\b",
+        lambda match: " " * len(match.group(0)),
+        evidence,
+        flags=re.IGNORECASE,
+    )
+
+
+def extract_technology_mentions(text: str | None) -> list[TechnologyMention]:
+    """Extract technologies with deterministic context and auditable evidence."""
+    selected: dict[str, TechnologyMention] = {}
+    for section, evidence, section_type in _iter_evidence(text or ""):
+        searchable = _without_links_and_emails(evidence)
+        for category, entries in _COMPILED_CATALOG.items():
+            for technology, pattern in entries:
+                match = pattern.search(searchable)
+                if match is None:
+                    continue
+                requirement_type = _classify_mention(searchable, match.start(), section_type)
+                mention = TechnologyMention(
+                    category=category,
+                    technology=technology,
+                    requirement_type=requirement_type,
+                    section=section,
+                    evidence_text=evidence,
+                )
+                current = selected.get(technology)
+                if current is None or _MENTION_PRIORITY[requirement_type] > _MENTION_PRIORITY[current.requirement_type]:
+                    selected[technology] = mention
+    return list(selected.values())
+
+
+def extract_concept_mentions(text: str | None) -> list[ConceptMention]:
+    """Extract non-tool data concepts separately from the technology stack."""
+    selected: dict[str, ConceptMention] = {}
+    for section, evidence, section_type in _iter_evidence(text or ""):
+        searchable = _without_links_and_emails(evidence)
+        for concept, pattern in _COMPILED_CONCEPTS:
+            match = pattern.search(searchable)
+            if match is None:
+                continue
+            requirement_type = _classify_mention(searchable, match.start(), section_type)
+            mention = ConceptMention(
+                concept=concept,
+                requirement_type=requirement_type,
+                section=section,
+                evidence_text=evidence,
+            )
+            current = selected.get(concept)
+            if current is None or _MENTION_PRIORITY[requirement_type] > _MENTION_PRIORITY[current.requirement_type]:
+                selected[concept] = mention
+    return list(selected.values())
+
 
 def extract_stack(text: str | None) -> dict[str, list[str]]:
     """Extract canonical technologies from vacancy text into stable categories."""
-    source = text or ""
+    source = _without_links_and_emails(text or "")
     return {
         category: [name for name, pattern in entries if pattern.search(source)]
         for category, entries in _COMPILED_CATALOG.items()

@@ -38,6 +38,31 @@ EXPERIENCE_PATTERNS = (
     re.compile(r"(?:at least|minimum|min\.?|requires?|required)\s*(\d{1,2})\+?\s*(?:years?|yrs?)", re.IGNORECASE),
     re.compile(r"\b(\d{1,2})\+?\s*(?:years?|yrs?)\s+(?:of\s+)?(?:relevant\s+|professional\s+|commercial\s+)?experience\b", re.IGNORECASE),
     re.compile(r"\b(?:praxe|zkušenost(?:i|í)?)\s*:?\s*(\d{1,2})\+?\s*(?:let|roky|roků)\b", re.IGNORECASE),
+    re.compile(
+        r"\b(\d{1,2})\+?\s+ans?\s+(?:minimum\s+)?d[’']exp[ée]rience\b|"
+        r"\b(?:minimum|au moins)\s+(\d{1,2})\+?\s+ans?\s+d[’']exp[ée]rience\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:mindestens\s+)?(\d{1,2})\+?\s+jahre?\s+(?:berufs)?erfahrung\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:m[íi]nimo(?:\s+de)?\s+)?(\d{1,2})\+?\s+a(?:ñ|n)os\s+de\s+experiencia\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:almeno\s+)?(\d{1,2})\+?\s+anni\s+di\s+esperienza\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:m[íi]nimo(?:\s+de)?\s+)?(\d{1,2})\+?\s+anos\s+de\s+experi[êe]ncia\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:minimum\s+)?(\d{1,2})\+?\s+lat\s+doświadczenia\b",
+        re.IGNORECASE,
+    ),
 )
 
 
@@ -49,10 +74,13 @@ class EligibilityDecision:
 
 
 def extract_required_years(description: str) -> int | None:
+    source = re.sub(r"\\([+*_.-])", r"\1", description or "")
     values = [
-        int(match.group(1))
+        int(value)
         for pattern in EXPERIENCE_PATTERNS
-        for match in pattern.finditer(description or "")
+        for match in pattern.finditer(source)
+        for value in [next((group for group in match.groups() if group is not None), None)]
+        if value is not None
     ]
     return max(values) if values else None
 

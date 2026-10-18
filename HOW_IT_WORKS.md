@@ -9,11 +9,11 @@ collector.py → JobSpy → Indeed
     ↓ raw dict
 normalizer.py → JobRecord
     ↓
-stack.py → категоризований technology stack
+stack.py → technology stack + required/preferred/alternative evidence + concepts
     ↓
 eligibility.py → eligible / unknown / rejected
     ↓
-repository.py → SQLite: jobs / observations / job_technologies
+repository.py → SQLite: jobs / observations / job_technologies / job_concepts
     ↓
 exporter.py → CSV / JSON / report.md
 ```
@@ -91,7 +91,17 @@ Senior допускається лише тоді, коли опис прямо 
 
 ### `job_technologies`
 
-Нормалізовані пари `job_id + category + technology`. Одна вакансія може мати багато рядків технологій.
+Нормалізовані рядки `job_id + category + technology`. Для кожної технології
+додатково зберігаються `requirement_type`, секція description та точний фрагмент
+`evidence_text`. Класифікація детермінована: явні required-формулювання,
+nice-to-have/preferred секції та явні альтернативи обробляються окремо; без
+достатнього контексту використовується `mentioned`.
+
+### `job_concepts`
+
+Окремо зберігає загальні поняття (`ETL/ELT`, `NLP`, `Data Quality`, `Lakehouse`,
+`Data Modeling` тощо) з таким самим evidence. Це не technology stack, тому
+концепції не збільшують підрахунок конкретних інструментів.
 
 ### `search_scopes` і `scope_jobs`
 
@@ -133,11 +143,11 @@ SQLite зберігає історію між запусками, а файли 
 Europe-збір також не запускає країни паралельно, щоб не створювати штучний burst запитів. Помилка однієї country/limit-спроби записується в її snapshot і не стирає результати інших країн. Значення `100/500/1000` є верхніми межами, а не гарантією кількості: якщо Indeed повернув менше на більшому ліміті, зберігається попередній більший batch.
 
 Для вибраних Europe-вакансій `stack.py` перевіряє title і description за словником
-технологій та записує у JSON два представлення: категоризований `stack` і
-дедуплікований `stack_flat`. `report.md` та `summary.json` використовують уже ці
-структуровані поля для переліку й підрахунку технологій; вони не намагаються
-повторно інтерпретувати текст вакансії. Це робить JSON джерелом даних для
-подальшого звіту.
+технологій та записує у JSON два сумісні представлення: категоризований `stack` і
+дедуплікований `stack_flat`. У SQLite той самий збір додатково записує контекстну
+класифікацію та evidence, а concepts тримає окремо. `report.md` і `summary.json`
+підраховують присутність технологій; для точного required/preferred аналізу слід
+query-ити `job_technologies.requirement_type` та `evidence_text`.
 
 Europe-збір замінює лише membership scope `europe:data-engineer`, тому country
 scopes, їх observations і technologies не стираються. View `europe_jobs` містить
