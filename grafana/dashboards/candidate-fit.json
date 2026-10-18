@@ -1,0 +1,538 @@
+{
+  "id": null,
+  "uid": "jobs-candidate-fit",
+  "title": "Jobs · Candidate Fit",
+  "tags": [
+    "indeed",
+    "data-engineer",
+    "europe"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "",
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "title": "Overview",
+      "type": "link",
+      "url": "/d/jobs-overview"
+    },
+    {
+      "title": "Technology Demand",
+      "type": "link",
+      "url": "/d/jobs-technology-demand"
+    },
+    {
+      "title": "Geography",
+      "type": "link",
+      "url": "/d/jobs-geography"
+    },
+    {
+      "title": "Candidate Fit",
+      "type": "link",
+      "url": "/d/jobs-candidate-fit"
+    },
+    {
+      "title": "Vacancy Explorer",
+      "type": "link",
+      "url": "/d/jobs-vacancy-explorer"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "country",
+        "label": "Country",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "jobs-sqlite"
+        },
+        "query": "SELECT 'All' AS __text, '__all' AS __value UNION ALL SELECT * FROM (SELECT DISTINCT country_code AS __text, country_code AS __value FROM europe_jobs ORDER BY country_code)",
+        "definition": "SELECT 'All' AS __text, '__all' AS __value UNION ALL SELECT * FROM (SELECT DISTINCT country_code AS __text, country_code AS __value FROM europe_jobs ORDER BY country_code)",
+        "includeAll": false,
+        "multi": false,
+        "refresh": 1,
+        "current": {
+          "text": "All",
+          "value": "__all"
+        }
+      },
+      {
+        "name": "eligibility",
+        "label": "Experience status",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "jobs-sqlite"
+        },
+        "query": "SELECT 'All' AS __text, '__all' AS __value UNION ALL SELECT * FROM (SELECT DISTINCT scope_eligibility AS __text, scope_eligibility AS __value FROM europe_jobs ORDER BY scope_eligibility)",
+        "definition": "SELECT 'All' AS __text, '__all' AS __value UNION ALL SELECT * FROM (SELECT DISTINCT scope_eligibility AS __text, scope_eligibility AS __value FROM europe_jobs ORDER BY scope_eligibility)",
+        "includeAll": false,
+        "multi": false,
+        "refresh": 1,
+        "current": {
+          "text": "All",
+          "value": "__all"
+        }
+      },
+      {
+        "name": "remote",
+        "label": "Work mode",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "jobs-sqlite"
+        },
+        "query": "SELECT 'All' AS __text, '__all' AS __value UNION ALL SELECT * FROM (SELECT 'Remote' AS __text, '1' AS __value UNION ALL SELECT 'On-site', '0')",
+        "definition": "SELECT 'All' AS __text, '__all' AS __value UNION ALL SELECT * FROM (SELECT 'Remote' AS __text, '1' AS __value UNION ALL SELECT 'On-site', '0')",
+        "includeAll": false,
+        "multi": false,
+        "refresh": 1,
+        "current": {
+          "text": "All",
+          "value": "__all"
+        }
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Confirmed ≤5 years",
+      "type": "stat",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT COUNT(*) AS Confirmed FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (     lower(e.title) NOT LIKE '%junior%'     AND lower(e.title) NOT LIKE '%lead%'     AND lower(e.title) NOT LIKE '%principal%'     AND lower(e.title) NOT LIKE '%staff%'     AND lower(e.title) NOT LIKE '%manager%'     AND lower(e.title) NOT LIKE '%director%'     AND (lower(e.title) NOT LIKE '%senior%' OR e.scope_eligibility = 'eligible') ) AND scope_eligibility = 'eligible'",
+          "rawQueryText": "SELECT COUNT(*) AS Confirmed FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (     lower(e.title) NOT LIKE '%junior%'     AND lower(e.title) NOT LIKE '%lead%'     AND lower(e.title) NOT LIKE '%principal%'     AND lower(e.title) NOT LIKE '%staff%'     AND lower(e.title) NOT LIKE '%manager%'     AND lower(e.title) NOT LIKE '%director%'     AND (lower(e.title) NOT LIKE '%senior%' OR e.scope_eligibility = 'eligible') ) AND scope_eligibility = 'eligible'",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Needs experience review",
+      "type": "stat",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT COUNT(*) AS Unknown FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (     lower(e.title) NOT LIKE '%junior%'     AND lower(e.title) NOT LIKE '%lead%'     AND lower(e.title) NOT LIKE '%principal%'     AND lower(e.title) NOT LIKE '%staff%'     AND lower(e.title) NOT LIKE '%manager%'     AND lower(e.title) NOT LIKE '%director%'     AND (lower(e.title) NOT LIKE '%senior%' OR e.scope_eligibility = 'eligible') ) AND scope_eligibility = 'unknown'",
+          "rawQueryText": "SELECT COUNT(*) AS Unknown FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (     lower(e.title) NOT LIKE '%junior%'     AND lower(e.title) NOT LIKE '%lead%'     AND lower(e.title) NOT LIKE '%principal%'     AND lower(e.title) NOT LIKE '%staff%'     AND lower(e.title) NOT LIKE '%manager%'     AND lower(e.title) NOT LIKE '%director%'     AND (lower(e.title) NOT LIKE '%senior%' OR e.scope_eligibility = 'eligible') ) AND scope_eligibility = 'unknown'",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Remote matches",
+      "type": "stat",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT COUNT(*) AS Remote FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (     lower(e.title) NOT LIKE '%junior%'     AND lower(e.title) NOT LIKE '%lead%'     AND lower(e.title) NOT LIKE '%principal%'     AND lower(e.title) NOT LIKE '%staff%'     AND lower(e.title) NOT LIKE '%manager%'     AND lower(e.title) NOT LIKE '%director%'     AND (lower(e.title) NOT LIKE '%senior%' OR e.scope_eligibility = 'eligible') ) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring}) AND is_remote = 1",
+          "rawQueryText": "SELECT COUNT(*) AS Remote FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (     lower(e.title) NOT LIKE '%junior%'     AND lower(e.title) NOT LIKE '%lead%'     AND lower(e.title) NOT LIKE '%principal%'     AND lower(e.title) NOT LIKE '%staff%'     AND lower(e.title) NOT LIKE '%manager%'     AND lower(e.title) NOT LIKE '%director%'     AND (lower(e.title) NOT LIKE '%senior%' OR e.scope_eligibility = 'eligible') ) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring}) AND is_remote = 1",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Companies hiring",
+      "type": "stat",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT COUNT(DISTINCT company) AS Companies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (     lower(e.title) NOT LIKE '%junior%'     AND lower(e.title) NOT LIKE '%lead%'     AND lower(e.title) NOT LIKE '%principal%'     AND lower(e.title) NOT LIKE '%staff%'     AND lower(e.title) NOT LIKE '%manager%'     AND lower(e.title) NOT LIKE '%director%'     AND (lower(e.title) NOT LIKE '%senior%' OR e.scope_eligibility = 'eligible') ) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring})",
+          "rawQueryText": "SELECT COUNT(DISTINCT company) AS Companies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (     lower(e.title) NOT LIKE '%junior%'     AND lower(e.title) NOT LIKE '%lead%'     AND lower(e.title) NOT LIKE '%principal%'     AND lower(e.title) NOT LIKE '%staff%'     AND lower(e.title) NOT LIKE '%manager%'     AND lower(e.title) NOT LIKE '%director%'     AND (lower(e.title) NOT LIKE '%senior%' OR e.scope_eligibility = 'eligible') ) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring})",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Eligibility by country",
+      "type": "barchart",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "always",
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT country_code AS Country, SUM(CASE WHEN scope_eligibility = 'eligible' THEN 1 ELSE 0 END) AS Confirmed, SUM(CASE WHEN scope_eligibility = 'unknown' THEN 1 ELSE 0 END) AS 'Needs review' FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (     lower(e.title) NOT LIKE '%junior%'     AND lower(e.title) NOT LIKE '%lead%'     AND lower(e.title) NOT LIKE '%principal%'     AND lower(e.title) NOT LIKE '%staff%'     AND lower(e.title) NOT LIKE '%manager%'     AND lower(e.title) NOT LIKE '%director%'     AND (lower(e.title) NOT LIKE '%senior%' OR e.scope_eligibility = 'eligible') ) GROUP BY country_code ORDER BY Confirmed DESC, 'Needs review' DESC",
+          "rawQueryText": "SELECT country_code AS Country, SUM(CASE WHEN scope_eligibility = 'eligible' THEN 1 ELSE 0 END) AS Confirmed, SUM(CASE WHEN scope_eligibility = 'unknown' THEN 1 ELSE 0 END) AS 'Needs review' FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (     lower(e.title) NOT LIKE '%junior%'     AND lower(e.title) NOT LIKE '%lead%'     AND lower(e.title) NOT LIKE '%principal%'     AND lower(e.title) NOT LIKE '%staff%'     AND lower(e.title) NOT LIKE '%manager%'     AND lower(e.title) NOT LIKE '%director%'     AND (lower(e.title) NOT LIKE '%senior%' OR e.scope_eligibility = 'eligible') ) GROUP BY country_code ORDER BY Confirmed DESC, 'Needs review' DESC",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Required technologies in matching vacancies",
+      "type": "barchart",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "always",
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT jt.technology AS Technology, COUNT(DISTINCT jt.job_id) AS Vacancies FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (     lower(e.title) NOT LIKE '%junior%'     AND lower(e.title) NOT LIKE '%lead%'     AND lower(e.title) NOT LIKE '%principal%'     AND lower(e.title) NOT LIKE '%staff%'     AND lower(e.title) NOT LIKE '%manager%'     AND lower(e.title) NOT LIKE '%director%'     AND (lower(e.title) NOT LIKE '%senior%' OR e.scope_eligibility = 'eligible') ) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring}) AND jt.requirement_type = 'required' GROUP BY jt.technology ORDER BY Vacancies DESC LIMIT 20",
+          "rawQueryText": "SELECT jt.technology AS Technology, COUNT(DISTINCT jt.job_id) AS Vacancies FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (     lower(e.title) NOT LIKE '%junior%'     AND lower(e.title) NOT LIKE '%lead%'     AND lower(e.title) NOT LIKE '%principal%'     AND lower(e.title) NOT LIKE '%staff%'     AND lower(e.title) NOT LIKE '%manager%'     AND lower(e.title) NOT LIKE '%director%'     AND (lower(e.title) NOT LIKE '%senior%' OR e.scope_eligibility = 'eligible') ) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring}) AND jt.requirement_type = 'required' GROUP BY jt.technology ORDER BY Vacancies DESC LIMIT 20",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Candidate shortlist",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 14
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "URL"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open vacancy",
+                    "url": "${__value.raw}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT e.title AS Title, e.company AS Company, e.country_code AS Country, e.location AS Location, CASE WHEN e.is_remote = 1 THEN 'Remote' ELSE 'On-site' END AS Mode, COALESCE(CAST(e.required_experience_years AS TEXT), 'Unknown') AS 'Years required', e.scope_eligibility AS Eligibility, e.published_at AS Published, e.canonical_url AS URL FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (     lower(e.title) NOT LIKE '%junior%'     AND lower(e.title) NOT LIKE '%lead%'     AND lower(e.title) NOT LIKE '%principal%'     AND lower(e.title) NOT LIKE '%staff%'     AND lower(e.title) NOT LIKE '%manager%'     AND lower(e.title) NOT LIKE '%director%'     AND (lower(e.title) NOT LIKE '%senior%' OR e.scope_eligibility = 'eligible') ) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring}) AND (${remote:sqlstring} = '__all' OR CAST(e.is_remote AS TEXT) = ${remote:sqlstring}) ORDER BY CASE e.scope_eligibility WHEN 'eligible' THEN 1 ELSE 2 END, e.is_remote DESC, e.published_at DESC LIMIT 250",
+          "rawQueryText": "SELECT e.title AS Title, e.company AS Company, e.country_code AS Country, e.location AS Location, CASE WHEN e.is_remote = 1 THEN 'Remote' ELSE 'On-site' END AS Mode, COALESCE(CAST(e.required_experience_years AS TEXT), 'Unknown') AS 'Years required', e.scope_eligibility AS Eligibility, e.published_at AS Published, e.canonical_url AS URL FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (     lower(e.title) NOT LIKE '%junior%'     AND lower(e.title) NOT LIKE '%lead%'     AND lower(e.title) NOT LIKE '%principal%'     AND lower(e.title) NOT LIKE '%staff%'     AND lower(e.title) NOT LIKE '%manager%'     AND lower(e.title) NOT LIKE '%director%'     AND (lower(e.title) NOT LIKE '%senior%' OR e.scope_eligibility = 'eligible') ) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring}) AND (${remote:sqlstring} = '__all' OR CAST(e.is_remote AS TEXT) = ${remote:sqlstring}) ORDER BY CASE e.scope_eligibility WHEN 'eligible' THEN 1 ELSE 2 END, e.is_remote DESC, e.published_at DESC LIMIT 250",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

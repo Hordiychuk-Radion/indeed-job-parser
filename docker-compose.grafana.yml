@@ -1,0 +1,46 @@
+services:
+  prepare-grafana-db:
+    image: python:3.11-alpine@sha256:d9368b3a5ac59afea7b5d4f2e2aea0941dbf9fdee9c369c5bec00b98244bc929
+    restart: "no"
+    command:
+      - python
+      - /app/prepare_grafana_database.py
+      - /source/jobs.db
+      - /report/jobs.db
+    volumes:
+      - ./data:/source
+      - ./scripts/prepare_grafana_database.py:/app/prepare_grafana_database.py:ro
+      - grafana-report-data:/report
+
+  grafana:
+    image: grafana/grafana:13.2.4@sha256:dbbc38ea21103cefb50396340cd88afec779c7e070b0a7bf5a75b4ce46651d3f
+    container_name: indeed-jobs-grafana
+    restart: unless-stopped
+    depends_on:
+      prepare-grafana-db:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"
+    environment:
+      GF_PLUGINS_PREINSTALL: frser-sqlite-datasource@4.0.6
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DATE_FORMATS_DEFAULT_TIMEZONE: browser
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-report-data:/data:ro
+      - grafana-storage:/var/lib/grafana
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 20s
+
+volumes:
+  grafana-report-data:
+  grafana-storage:

@@ -2,7 +2,7 @@
 
 Окремий локальний проєкт для конфігурованого збору вакансій Indeed, їх нормалізації, перевірки вимог до досвіду та збереження у SQLite, CSV і JSON.
 
-Grafana навмисно не входить у цей репозиторій.
+Для локальної аналітики репозиторій містить готовий Grafana report поверх тієї самої SQLite-бази.
 
 ## Що відбувається під час запуску
 
@@ -187,6 +187,47 @@ uv run indeed-jobs inspect-db \
 eligibility, частотою технологій та останніми вакансіями разом з description,
 stack, contextual technology mentions і concepts.
 Для графічного перегляду той самий `jobs.db` можна відкрити у DB Browser for SQLite.
+
+### Grafana report
+
+```bash
+docker compose -f docker-compose.grafana.yml up -d
+open http://127.0.0.1:3001/d/jobs-overview
+```
+
+Порт `3001` використовується, щоб не конфліктувати з іншою локальною Grafana на `3000`.
+Його можна змінити: `GRAFANA_PORT=3010 docker compose -f docker-compose.grafana.yml up -d`.
+
+Provisioning автоматично створює SQLite datasource та п'ять пов'язаних dashboards:
+
+- **Overview** — вакансії, країни, компанії, remote share і дати публікації;
+- **Technology Demand** — required, preferred, alternative та mentioned stack;
+- **Geography** — географічне покриття, remote і технології за країнами;
+- **Candidate Fit** — підтверджені ≤5 років та unknown для review без несумісних
+  Junior/Lead/Principal/Staff/management і непідтверджених Senior ролей;
+- **Vacancy Explorer** — рівень вакансії, stack, evidence і клікабельний URL.
+
+Перед стартом одноразовий `prepare-grafana-db` робить узгоджений SQLite snapshot у Docker
+volume. Grafana отримує цей snapshot через read-only mount, тому report не має write-доступу
+до робочого `data/jobs.db`. Щоб підтягнути новий parser run, виконайте `down`, а потім `up -d`
+ще раз.
+
+Grafana слухає лише `127.0.0.1`; anonymous access має роль Viewer, а provisioned datasource
+і dashboards не можна редагувати. SQLite plugin працює в query-only mode. Не виставляйте цей
+контейнер у публічну мережу без окремої автентифікації.
+
+Перевірка живого report через Grafana API та реальний SQL-запит:
+
+```bash
+python3 scripts/verify_grafana.py
+```
+
+Після зміни builder перегенеруйте JSON і зупиняйте Grafana так:
+
+```bash
+uv run python scripts/build_grafana_dashboards.py
+docker compose -f docker-compose.grafana.yml down
+```
 
 Результати:
 

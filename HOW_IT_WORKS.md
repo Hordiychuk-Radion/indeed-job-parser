@@ -228,4 +228,32 @@ uv run indeed-jobs run data-engineer-middle-de --location Hamburg --days-old 7
 uv run indeed-jobs europe-data-engineer
 ```
 
-Команда проходить усі європейські країни з `EUROPE_COUNTRIES`, які підтримує поточна версія JobSpy. Вона не використовує TOML-профіль, SQLite eligibility до 5 років або city filter: її мета — широкий source-level dataset Data Engineer із повним аудитом спроб. Для персонального shortlist далі застосовуються звичайні профілі та eligibility pipeline.
+Команда проходить усі європейські країни з `EUROPE_COUNTRIES`, які підтримує поточна версія JobSpy. Вона не використовує TOML-профіль або city filter: її мета — широкий source-level dataset Data Engineer із повним аудитом спроб. Явні вимоги понад 5 років не входять до Europe scope; невказаний досвід зберігається як `unknown` для review. Персональний Grafana shortlist додатково прибирає Junior/Lead/Principal/Staff/management і допускає Senior лише з підтвердженням ≤5 років.
+
+## 12. Grafana report
+
+`docker-compose.grafana.yml` спочатку запускає одноразовий `prepare-grafana-db`.
+`scripts/prepare_grafana_database.py` використовує SQLite backup API, перевіряє snapshot
+через `PRAGMA integrity_check` і атомарно кладе його в окремий Docker volume. Після цього
+Grafana 13.2.4 стартує на `127.0.0.1:3001` та бачить snapshot як read-only
+`/data/jobs.db`. Provisioning створює datasource `jobs-sqlite` для plugin
+`frser-sqlite-datasource` і завантажує п'ять JSON dashboards із `grafana/dashboards/`.
+
+```text
+data/jobs.db
+    ↓ SQLite backup API + integrity check
+read-only reporting snapshot
+    ↓ query-only SQLite datasource
+Overview / Technology Demand / Geography / Candidate Fit / Vacancy Explorer
+```
+
+`scripts/build_grafana_dashboards.py` є відтворюваним джерелом dashboard JSON. Тести
+перевіряють стабільні UID, datasource bindings, фільтри, URL/evidence contract і виконують
+кожен panel SQL проти мінімальної SQLite-схеми. `scripts/verify_grafana.py` додатково читає
+health, datasource, усі dashboards і реальну кількість вакансій через живий Grafana API.
+
+Grafana не змінює job data: reporting volume монтується read-only, datasource provisioned як
+non-editable, SQLite plugin додає query-only pragma, а anonymous user має лише Viewer.
+Source-каталог `data/` доступний лише короткоживучому snapshot-контейнеру, бо читання WAL-бази
+може потребувати сусідніх `-wal`/`-shm` файлів. Після нового parser run report оновлюється через
+повторний `docker compose ... down` і `docker compose ... up -d`.

@@ -1,0 +1,556 @@
+{
+  "id": null,
+  "uid": "jobs-overview",
+  "title": "Jobs · Overview",
+  "tags": [
+    "indeed",
+    "data-engineer",
+    "europe"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "",
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "title": "Overview",
+      "type": "link",
+      "url": "/d/jobs-overview"
+    },
+    {
+      "title": "Technology Demand",
+      "type": "link",
+      "url": "/d/jobs-technology-demand"
+    },
+    {
+      "title": "Geography",
+      "type": "link",
+      "url": "/d/jobs-geography"
+    },
+    {
+      "title": "Candidate Fit",
+      "type": "link",
+      "url": "/d/jobs-candidate-fit"
+    },
+    {
+      "title": "Vacancy Explorer",
+      "type": "link",
+      "url": "/d/jobs-vacancy-explorer"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "country",
+        "label": "Country",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "jobs-sqlite"
+        },
+        "query": "SELECT 'All' AS __text, '__all' AS __value UNION ALL SELECT * FROM (SELECT DISTINCT country_code AS __text, country_code AS __value FROM europe_jobs ORDER BY country_code)",
+        "definition": "SELECT 'All' AS __text, '__all' AS __value UNION ALL SELECT * FROM (SELECT DISTINCT country_code AS __text, country_code AS __value FROM europe_jobs ORDER BY country_code)",
+        "includeAll": false,
+        "multi": false,
+        "refresh": 1,
+        "current": {
+          "text": "All",
+          "value": "__all"
+        }
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Active vacancies",
+      "type": "stat",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
+          "rawQueryText": "SELECT COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Countries",
+      "type": "stat",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT COUNT(DISTINCT country_code) AS Countries FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
+          "rawQueryText": "SELECT COUNT(DISTINCT country_code) AS Countries FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Companies",
+      "type": "stat",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT COUNT(DISTINCT company) AS Companies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
+          "rawQueryText": "SELECT COUNT(DISTINCT company) AS Companies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Remote share",
+      "type": "stat",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT ROUND(100.0 * SUM(CASE WHEN is_remote = 1 THEN 1 ELSE 0 END) / COUNT(*), 1) AS 'Remote %' FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
+          "rawQueryText": "SELECT ROUND(100.0 * SUM(CASE WHEN is_remote = 1 THEN 1 ELSE 0 END) / COUNT(*), 1) AS 'Remote %' FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Vacancies by country",
+      "type": "barchart",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "always",
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT country_code AS Country, COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY country_code ORDER BY Vacancies DESC",
+          "rawQueryText": "SELECT country_code AS Country, COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY country_code ORDER BY Vacancies DESC",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Top companies",
+      "type": "barchart",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "always",
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT company AS Company, COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY company ORDER BY Vacancies DESC LIMIT 15",
+          "rawQueryText": "SELECT company AS Company, COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY company ORDER BY Vacancies DESC LIMIT 15",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Vacancies by publication date",
+      "type": "barchart",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "always",
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT published_at AS Date, COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY published_at ORDER BY published_at",
+          "rawQueryText": "SELECT published_at AS Date, COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY published_at ORDER BY published_at",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Employment type coverage",
+      "type": "barchart",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0,
+        "showValue": "always",
+        "stacking": "none",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT COALESCE(NULLIF(employment_type, ''), 'Unknown') AS Type, COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY Type ORDER BY Vacancies DESC",
+          "rawQueryText": "SELECT COALESCE(NULLIF(employment_type, ''), 'Unknown') AS Type, COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY Type ORDER BY Vacancies DESC",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

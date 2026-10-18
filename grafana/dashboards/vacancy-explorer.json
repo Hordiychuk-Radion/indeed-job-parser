@@ -1,0 +1,416 @@
+{
+  "id": null,
+  "uid": "jobs-vacancy-explorer",
+  "title": "Jobs · Vacancy Explorer",
+  "tags": [
+    "indeed",
+    "data-engineer",
+    "europe"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "",
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "title": "Overview",
+      "type": "link",
+      "url": "/d/jobs-overview"
+    },
+    {
+      "title": "Technology Demand",
+      "type": "link",
+      "url": "/d/jobs-technology-demand"
+    },
+    {
+      "title": "Geography",
+      "type": "link",
+      "url": "/d/jobs-geography"
+    },
+    {
+      "title": "Candidate Fit",
+      "type": "link",
+      "url": "/d/jobs-candidate-fit"
+    },
+    {
+      "title": "Vacancy Explorer",
+      "type": "link",
+      "url": "/d/jobs-vacancy-explorer"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "country",
+        "label": "Country",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "jobs-sqlite"
+        },
+        "query": "SELECT 'All' AS __text, '__all' AS __value UNION ALL SELECT * FROM (SELECT DISTINCT country_code AS __text, country_code AS __value FROM europe_jobs ORDER BY country_code)",
+        "definition": "SELECT 'All' AS __text, '__all' AS __value UNION ALL SELECT * FROM (SELECT DISTINCT country_code AS __text, country_code AS __value FROM europe_jobs ORDER BY country_code)",
+        "includeAll": false,
+        "multi": false,
+        "refresh": 1,
+        "current": {
+          "text": "All",
+          "value": "__all"
+        }
+      },
+      {
+        "name": "eligibility",
+        "label": "Experience status",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "jobs-sqlite"
+        },
+        "query": "SELECT 'All' AS __text, '__all' AS __value UNION ALL SELECT * FROM (SELECT DISTINCT scope_eligibility AS __text, scope_eligibility AS __value FROM europe_jobs ORDER BY scope_eligibility)",
+        "definition": "SELECT 'All' AS __text, '__all' AS __value UNION ALL SELECT * FROM (SELECT DISTINCT scope_eligibility AS __text, scope_eligibility AS __value FROM europe_jobs ORDER BY scope_eligibility)",
+        "includeAll": false,
+        "multi": false,
+        "refresh": 1,
+        "current": {
+          "text": "All",
+          "value": "__all"
+        }
+      },
+      {
+        "name": "remote",
+        "label": "Work mode",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "jobs-sqlite"
+        },
+        "query": "SELECT 'All' AS __text, '__all' AS __value UNION ALL SELECT * FROM (SELECT 'Remote' AS __text, '1' AS __value UNION ALL SELECT 'On-site', '0')",
+        "definition": "SELECT 'All' AS __text, '__all' AS __value UNION ALL SELECT * FROM (SELECT 'Remote' AS __text, '1' AS __value UNION ALL SELECT 'On-site', '0')",
+        "includeAll": false,
+        "multi": false,
+        "refresh": 1,
+        "current": {
+          "text": "All",
+          "value": "__all"
+        }
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Visible vacancies",
+      "type": "stat",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring}) AND (${remote:sqlstring} = '__all' OR CAST(e.is_remote AS TEXT) = ${remote:sqlstring})",
+          "rawQueryText": "SELECT COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring}) AND (${remote:sqlstring} = '__all' OR CAST(e.is_remote AS TEXT) = ${remote:sqlstring})",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Remote",
+      "type": "stat",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT COUNT(*) AS Remote FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring}) AND (${remote:sqlstring} = '__all' OR CAST(e.is_remote AS TEXT) = ${remote:sqlstring}) AND is_remote = 1",
+          "rawQueryText": "SELECT COUNT(*) AS Remote FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring}) AND (${remote:sqlstring} = '__all' OR CAST(e.is_remote AS TEXT) = ${remote:sqlstring}) AND is_remote = 1",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Confirmed ≤5 years",
+      "type": "stat",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT COUNT(*) AS Confirmed FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring}) AND (${remote:sqlstring} = '__all' OR CAST(e.is_remote AS TEXT) = ${remote:sqlstring}) AND scope_eligibility = 'eligible'",
+          "rawQueryText": "SELECT COUNT(*) AS Confirmed FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring}) AND (${remote:sqlstring} = '__all' OR CAST(e.is_remote AS TEXT) = ${remote:sqlstring}) AND scope_eligibility = 'eligible'",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Companies",
+      "type": "stat",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT COUNT(DISTINCT company) AS Companies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring}) AND (${remote:sqlstring} = '__all' OR CAST(e.is_remote AS TEXT) = ${remote:sqlstring})",
+          "rawQueryText": "SELECT COUNT(DISTINCT company) AS Companies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring}) AND (${remote:sqlstring} = '__all' OR CAST(e.is_remote AS TEXT) = ${remote:sqlstring})",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Vacancies",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 20
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "URL"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open vacancy",
+                    "url": "${__value.raw}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "SELECT\n            e.title AS Title,\n            e.company AS Company,\n            e.country_code AS Country,\n            e.location AS Location,\n            CASE WHEN e.is_remote = 1 THEN 'Remote' ELSE 'On-site' END AS Mode,\n            e.scope_eligibility AS Eligibility,\n            COALESCE(CAST(e.required_experience_years AS TEXT), 'Unknown') AS Experience,\n            e.published_at AS Published,\n            COALESCE((SELECT GROUP_CONCAT(x.technology, ', ') FROM (SELECT technology FROM job_technologies WHERE job_id = e.id AND requirement_type = 'required' ORDER BY technology) x), '') AS required_stack,\n            COALESCE((SELECT GROUP_CONCAT(x.technology, ', ') FROM (SELECT technology FROM job_technologies WHERE job_id = e.id AND requirement_type = 'preferred' ORDER BY technology) x), '') AS preferred_stack,\n            COALESCE((SELECT GROUP_CONCAT(x.technology, ', ') FROM (SELECT technology FROM job_technologies WHERE job_id = e.id AND requirement_type = 'alternative' ORDER BY technology) x), '') AS alternatives,\n            COALESCE((SELECT GROUP_CONCAT(x.evidence_text, ' | ') FROM (SELECT DISTINCT evidence_text FROM job_technologies WHERE job_id = e.id AND requirement_type IN ('required', 'preferred', 'alternative') ORDER BY evidence_text) x), '') AS evidence,\n            e.canonical_url AS URL\n        FROM europe_jobs e\n        WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring}) AND (${remote:sqlstring} = '__all' OR CAST(e.is_remote AS TEXT) = ${remote:sqlstring})\n        ORDER BY CASE e.scope_eligibility WHEN 'eligible' THEN 1 ELSE 2 END, e.published_at DESC\n        LIMIT 500",
+          "rawQueryText": "SELECT\n            e.title AS Title,\n            e.company AS Company,\n            e.country_code AS Country,\n            e.location AS Location,\n            CASE WHEN e.is_remote = 1 THEN 'Remote' ELSE 'On-site' END AS Mode,\n            e.scope_eligibility AS Eligibility,\n            COALESCE(CAST(e.required_experience_years AS TEXT), 'Unknown') AS Experience,\n            e.published_at AS Published,\n            COALESCE((SELECT GROUP_CONCAT(x.technology, ', ') FROM (SELECT technology FROM job_technologies WHERE job_id = e.id AND requirement_type = 'required' ORDER BY technology) x), '') AS required_stack,\n            COALESCE((SELECT GROUP_CONCAT(x.technology, ', ') FROM (SELECT technology FROM job_technologies WHERE job_id = e.id AND requirement_type = 'preferred' ORDER BY technology) x), '') AS preferred_stack,\n            COALESCE((SELECT GROUP_CONCAT(x.technology, ', ') FROM (SELECT technology FROM job_technologies WHERE job_id = e.id AND requirement_type = 'alternative' ORDER BY technology) x), '') AS alternatives,\n            COALESCE((SELECT GROUP_CONCAT(x.evidence_text, ' | ') FROM (SELECT DISTINCT evidence_text FROM job_technologies WHERE job_id = e.id AND requirement_type IN ('required', 'preferred', 'alternative') ORDER BY evidence_text) x), '') AS evidence,\n            e.canonical_url AS URL\n        FROM europe_jobs e\n        WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND (${eligibility:sqlstring} = '__all' OR e.scope_eligibility = ${eligibility:sqlstring}) AND (${remote:sqlstring} = '__all' OR CAST(e.is_remote AS TEXT) = ${remote:sqlstring})\n        ORDER BY CASE e.scope_eligibility WHEN 'eligible' THEN 1 ELSE 2 END, e.published_at DESC\n        LIMIT 500",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
