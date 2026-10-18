@@ -245,23 +245,20 @@ def collect_europe_data_engineers(
             }
         )
         try:
-            for job_payload in all_jobs:
-                job = JobRecord(**job_payload)
-                title_matches = _DATA_ENGINEER_RE.search(job.title) is not None
+            repository.connection.execute("DELETE FROM job_observations")
+            repository.connection.execute("DELETE FROM job_technologies")
+            repository.connection.execute("DELETE FROM jobs")
+            for job_payload in selected_jobs:
                 job = replace(
-                    job,
-                    eligibility="eligible" if title_matches else "rejected",
-                    eligibility_reason=(
-                        "title_matches_data_engineer"
-                        if title_matches
-                        else "title_not_data_engineer"
-                    ),
+                    JobRecord(**job_payload),
+                    eligibility="eligible",
+                    eligibility_reason="title_matches_data_engineer",
                 )
                 job_id = repository.save_job(
                     database_run_id,
                     job,
                     {
-                        "persistence_source": "largest_normalized_country_snapshot",
+                        "persistence_source": "selected_data_engineer_export",
                         "normalized_job": job_payload,
                     },
                     commit=False,

@@ -150,7 +150,7 @@ Europe-результати:
 - `summary.json` — кількості, помилки по країнах і агрегований `technology_counts`;
 - `snapshots/<country>/<run-id>/limit-*.json` — повна відповідь кожної спроби;
 - `snapshots/<country>/largest-batch.json` — найбільша збережена вибірка країни.
-- `jobs.db` — SQLite з описами, ingestion history, observations і нормалізованим стеком у `job_technologies`.
+- `jobs.db` — актуальний snapshot тільки відібраних Europe-вакансій з descriptions, observations і нормалізованим стеком у `job_technologies`; кожен Europe-запуск замінює попередній snapshot, а відхилена raw-видача залишається у `jobs-all.json` та snapshots.
 
 `stack` має стабільні категорії: `languages`, `cloud`, `data_platforms`,
 `processing_streaming`, `orchestration_transformation`, `databases`, `devops` і
