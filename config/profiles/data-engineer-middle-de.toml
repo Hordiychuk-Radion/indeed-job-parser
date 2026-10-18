@@ -16,5 +16,5 @@ include_title_patterns = ["Data Engineer", "ETL Developer", "Data Platform Engin
 exclude_title_patterns = ["Junior", "Intern", "Trainee", "Lead", "Principal", "Staff", "Manager", "Director"]
 
 [storage]
-database_path = "../../data/profiles/data-engineer-middle-de.db"
+database_path = "../../data/jobs.db"
 output_dir = "../../output/profiles/data-engineer-middle-de"

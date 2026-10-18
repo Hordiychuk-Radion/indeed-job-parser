@@ -66,14 +66,26 @@ def run_pipeline(
     config = load_config(config_path, overrides=overrides)
     raw_rows, errors = collect_indeed(config.search, scrape_fn=scrape_fn)
     processed: list[JobRecord] = []
+    scope_key = f"country:{config.search.country_code.upper()}"
     with JobRepository(config.storage.database_path) as repository:
-        run_id = repository.start_run(asdict(config))
+        repository.ensure_scope(
+            scope_key,
+            "country",
+            country_code=config.search.country_code,
+            label=config.search.country,
+        )
+        run_id = repository.start_run(asdict(config), scope_key=scope_key)
         try:
+            scope_memberships: list[tuple[int, str, str]] = []
             for raw in raw_rows:
                 job = normalize_record(raw, raw.get("_query", ""), config.search.country_code)
                 job = _apply_decision(job, config)
                 processed.append(job)
-                repository.save_job(run_id, job, raw)
+                job_id = repository.save_job(run_id, job, raw, commit=False)
+                scope_memberships.append(
+                    (job_id, job.eligibility, job.eligibility_reason)
+                )
+            repository.replace_scope_jobs(scope_key, scope_memberships, commit=False)
             counts = {
                 status: sum(job.eligibility == status for job in processed)
                 for status in ("eligible", "unknown", "rejected")
@@ -89,6 +101,7 @@ def run_pipeline(
                 error_message="\n".join(errors) or None,
             )
         except Exception as exc:
+            repository.connection.rollback()
             repository.finish_run(
                 run_id,
                 status="failed",

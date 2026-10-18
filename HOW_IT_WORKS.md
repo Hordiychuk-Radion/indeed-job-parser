@@ -75,7 +75,7 @@ Senior допускається лише тоді, коли опис прямо 
 
 ## 5. SQLite
 
-`repository.py` створює чотири прикладні таблиці:
+`repository.py` використовує одну SQLite-базу для Europe та country-запусків:
 
 ### `jobs`
 
@@ -92,6 +92,12 @@ Senior допускається лише тоді, коли опис прямо 
 ### `job_technologies`
 
 Нормалізовані пари `job_id + category + technology`. Одна вакансія може мати багато рядків технологій.
+
+### `search_scopes` і `scope_jobs`
+
+`search_scopes` описує логічні витяги: `europe:data-engineer`, `country:DE`, `country:CZ` тощо. `scope_jobs` пов'язує вакансії з витягами та зберігає eligibility саме в межах цього витягу. Одна вакансія може входити одночасно до Europe і country scope без дублювання рядка в `jobs`.
+
+Views `europe_jobs` і `country_jobs` дають готові списки для DB Browser. Повторний запуск замінює membership тільки свого scope й не стирає інші витяги.
 
 Налаштування SQLite:
 
@@ -133,8 +139,9 @@ Europe-збір також не запускає країни паралельн
 повторно інтерпретувати текст вакансії. Це робить JSON джерелом даних для
 подальшого звіту.
 
-Europe-збір замінює вміст `jobs`, `job_observations` і `job_technologies`
-актуальним snapshot лише відібраних вакансій; відхилена пошукова видача
+Europe-збір замінює лише membership scope `europe:data-engineer`, тому country
+scopes, їх observations і technologies не стираються. View `europe_jobs` містить
+актуальний snapshot лише відібраних Europe-вакансій; відхилена пошукова видача
 залишається у `jobs-all.json` і snapshots. `jobs.description`
 містить актуальний нормалізований опис, `job_observations.raw_payload` — payload
 конкретного спостереження, а `job_technologies` — нормалізовані пари

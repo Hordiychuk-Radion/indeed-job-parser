@@ -36,5 +36,5 @@ exclude_title_patterns = [
 ]
 
 [storage]
-database_path = "../data/data-engineer.db"
+database_path = "../data/jobs.db"
 output_dir = "../output/data-engineer"

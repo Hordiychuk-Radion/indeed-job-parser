@@ -13,5 +13,5 @@ max_experience_years = 5
 include_unknown = true
 
 [storage]
-database_path = "../data/smoke.db"
+database_path = "../data/jobs.db"
 output_dir = "../output/smoke"

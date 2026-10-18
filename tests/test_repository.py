@@ -42,7 +42,140 @@ def test_initializes_wal_schema(tmp_path: Path):
             )
         }
     assert mode == "wal"
-    assert {"jobs", "ingestion_runs", "job_observations", "job_technologies"}.issubset(tables)
+    assert {
+        "jobs",
+        "ingestion_runs",
+        "job_observations",
+        "job_technologies",
+        "search_scopes",
+        "scope_jobs",
+    }.issubset(tables)
+
+
+def test_migrates_legacy_ingestion_runs_with_no_scope_column(tmp_path: Path):
+    database = tmp_path / "legacy.db"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            CREATE TABLE ingestion_runs (
+                id TEXT PRIMARY KEY, started_at TEXT NOT NULL, finished_at TEXT,
+                status TEXT NOT NULL, rows_received INTEGER NOT NULL DEFAULT 0,
+                rows_eligible INTEGER NOT NULL DEFAULT 0,
+                rows_unknown INTEGER NOT NULL DEFAULT 0,
+                rows_rejected INTEGER NOT NULL DEFAULT 0,
+                error_count INTEGER NOT NULL DEFAULT 0, error_message TEXT,
+                config_json TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "INSERT INTO ingestion_runs (id, started_at, status, config_json) "
+            "VALUES ('legacy-run', '2026-01-01T00:00:00Z', 'succeeded', '{}')"
+        )
+
+    with JobRepository(database) as repository:
+        columns = {
+            row[1] for row in repository.connection.execute(
+                "PRAGMA table_info(ingestion_runs)"
+            )
+        }
+        legacy = repository.connection.execute(
+            "SELECT id, scope_key FROM ingestion_runs WHERE id='legacy-run'"
+        ).fetchone()
+
+    assert "scope_key" in columns
+    assert tuple(legacy) == ("legacy-run", None)
+
+
+def test_one_job_can_belong_to_europe_and_country_scopes(tmp_path: Path):
+    with JobRepository(tmp_path / "jobs.db") as repository:
+        repository.ensure_scope("europe:data-engineer", "europe", label="Europe Data Engineer")
+        repository.ensure_scope(
+            "country:DE", "country", country_code="DE", label="Germany"
+        )
+        run_id = repository.start_run(
+            {"mode": "country"}, scope_key="country:DE"
+        )
+        job_id = repository.save_job(run_id, sample_job(), {"raw": 1})
+        repository.replace_scope_jobs(
+            "country:DE", [(job_id, "unknown", "experience_not_stated")]
+        )
+        repository.replace_scope_jobs(
+            "europe:data-engineer",
+            [(job_id, "eligible", "title_matches_data_engineer")],
+        )
+
+        jobs = repository.connection.execute("SELECT count(*) FROM jobs").fetchone()[0]
+        memberships = repository.connection.execute(
+            "SELECT scope_key, eligibility FROM scope_jobs ORDER BY scope_key"
+        ).fetchall()
+
+    assert jobs == 1
+    assert [tuple(row) for row in memberships] == [
+        ("country:DE", "unknown"),
+        ("europe:data-engineer", "eligible"),
+    ]
+
+
+def test_replacing_one_scope_preserves_other_scope_memberships(tmp_path: Path):
+    with JobRepository(tmp_path / "jobs.db") as repository:
+        repository.ensure_scope("europe:data-engineer", "europe", label="Europe")
+        repository.ensure_scope("country:DE", "country", country_code="DE", label="Germany")
+        run_id = repository.start_run({}, scope_key="country:DE")
+        shared_id = repository.save_job(run_id, sample_job(), {"raw": 1})
+        country_only_id = repository.save_job(
+            run_id,
+            replace(sample_job(), dedupe_key="country-only", source_job_id="country-only"),
+            {"raw": 2},
+        )
+        repository.replace_scope_jobs(
+            "country:DE",
+            [
+                (shared_id, "unknown", "experience_not_stated"),
+                (country_only_id, "eligible", "eligible"),
+            ],
+        )
+        repository.replace_scope_jobs(
+            "europe:data-engineer", [(shared_id, "eligible", "title_matches")]
+        )
+        repository.replace_scope_jobs("europe:data-engineer", [])
+
+        country_ids = repository.connection.execute(
+            "SELECT job_id FROM scope_jobs WHERE scope_key='country:DE' ORDER BY job_id"
+        ).fetchall()
+        europe_count = repository.connection.execute(
+            "SELECT count(*) FROM scope_jobs WHERE scope_key='europe:data-engineer'"
+        ).fetchone()[0]
+        country_view_count = repository.connection.execute(
+            "SELECT count(*) FROM country_jobs"
+        ).fetchone()[0]
+
+    assert [row[0] for row in country_ids] == [shared_id, country_only_id]
+    assert europe_count == 0
+    assert country_view_count == 2
+
+
+def test_scope_membership_replacement_deduplicates_repeated_jobs(tmp_path: Path):
+    with JobRepository(tmp_path / "jobs.db") as repository:
+        repository.ensure_scope("country:CZ", "country", country_code="CZ", label="Czechia")
+        run_id = repository.start_run({}, scope_key="country:CZ")
+        job_id = repository.save_job(run_id, sample_job(), {"raw": 1})
+
+        repository.replace_scope_jobs(
+            "country:CZ",
+            [
+                (job_id, "unknown", "first_query"),
+                (job_id, "eligible", "second_query"),
+            ],
+        )
+
+        memberships = repository.connection.execute(
+            "SELECT job_id, eligibility, eligibility_reason FROM scope_jobs"
+        ).fetchall()
+
+    assert [tuple(row) for row in memberships] == [
+        (job_id, "eligible", "second_query")
+    ]
 
 
 def test_replaces_structured_job_technologies(tmp_path: Path):
@@ -132,6 +265,12 @@ def test_inspects_database_with_descriptions_and_stack(tmp_path: Path):
             job_id,
             {"languages": ["Python"], "cloud": ["AWS"]},
         )
+        repository.ensure_scope(
+            "country:CZ", "country", country_code="CZ", label="Czech Republic"
+        )
+        repository.replace_scope_jobs(
+            "country:CZ", [(job_id, "unknown", "experience_not_stated")]
+        )
         repository.finish_run(
             run_id,
             status="succeeded",
@@ -145,6 +284,15 @@ def test_inspects_database_with_descriptions_and_stack(tmp_path: Path):
     payload = inspect_database(database, limit=5)
 
     assert payload["counts"] == {"jobs": 1, "observations": 1, "runs": 1}
+    assert payload["scopes"] == [
+        {
+            "scope_key": "country:CZ",
+            "scope_type": "country",
+            "country_code": "CZ",
+            "label": "Czech Republic",
+            "jobs": 1,
+        }
+    ]
     assert payload["eligibility_counts"] == {"unknown": 1}
     assert payload["technology_counts"] == [
         {"technology": "AWS", "jobs": 1},
@@ -156,3 +304,32 @@ def test_inspects_database_with_descriptions_and_stack(tmp_path: Path):
         "cloud": ["AWS"],
         "languages": ["Python"],
     }
+
+
+def test_inspection_counts_technology_when_any_scope_selects_the_job(tmp_path: Path):
+    database = tmp_path / "jobs.db"
+    with JobRepository(database) as repository:
+        repository.ensure_scope("europe:data-engineer", "europe", label="Europe")
+        repository.ensure_scope("country:DE", "country", country_code="DE", label="Germany")
+        run_id = repository.start_run({}, scope_key="europe:data-engineer")
+        job_id = repository.save_job(run_id, sample_job(), {"raw": 1})
+        repository.replace_job_technologies(job_id, {"languages": ["Python"]})
+        repository.replace_scope_jobs(
+            "europe:data-engineer", [(job_id, "eligible", "title_matches")]
+        )
+        repository.save_job(
+            run_id,
+            replace(
+                sample_job(),
+                eligibility="rejected",
+                eligibility_reason="country_filter_rejected",
+            ),
+            {"raw": 2},
+        )
+        repository.replace_scope_jobs(
+            "country:DE", [(job_id, "rejected", "country_filter_rejected")]
+        )
+
+    payload = inspect_database(database)
+
+    assert payload["technology_counts"] == [{"technology": "Python", "jobs": 1}]

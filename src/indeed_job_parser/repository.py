@@ -21,7 +21,16 @@ CREATE TABLE IF NOT EXISTS ingestion_runs (
     rows_rejected INTEGER NOT NULL DEFAULT 0,
     error_count INTEGER NOT NULL DEFAULT 0,
     error_message TEXT,
-    config_json TEXT NOT NULL
+    config_json TEXT NOT NULL,
+    scope_key TEXT
+);
+
+CREATE TABLE IF NOT EXISTS search_scopes (
+    scope_key TEXT PRIMARY KEY,
+    scope_type TEXT NOT NULL CHECK (scope_type IN ('europe', 'country')),
+    country_code TEXT,
+    label TEXT NOT NULL,
+    updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS jobs (
@@ -66,12 +75,46 @@ CREATE TABLE IF NOT EXISTS job_technologies (
     PRIMARY KEY (job_id, category, technology)
 );
 
+CREATE TABLE IF NOT EXISTS scope_jobs (
+    scope_key TEXT NOT NULL REFERENCES search_scopes(scope_key) ON DELETE CASCADE,
+    job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    eligibility TEXT NOT NULL,
+    eligibility_reason TEXT NOT NULL,
+    PRIMARY KEY (scope_key, job_id)
+);
+
 CREATE INDEX IF NOT EXISTS jobs_status_idx ON jobs(status);
 CREATE INDEX IF NOT EXISTS jobs_country_idx ON jobs(country_code);
 CREATE INDEX IF NOT EXISTS jobs_published_idx ON jobs(published_at);
 CREATE INDEX IF NOT EXISTS jobs_eligibility_idx ON jobs(eligibility);
 CREATE INDEX IF NOT EXISTS observations_run_idx ON job_observations(run_id);
 CREATE INDEX IF NOT EXISTS technologies_name_idx ON job_technologies(technology);
+CREATE INDEX IF NOT EXISTS scope_jobs_job_idx ON scope_jobs(job_id);
+
+CREATE VIEW IF NOT EXISTS europe_jobs AS
+SELECT
+    sj.scope_key,
+    s.label AS scope_label,
+    sj.eligibility AS scope_eligibility,
+    sj.eligibility_reason AS scope_eligibility_reason,
+    j.*
+FROM scope_jobs AS sj
+JOIN search_scopes AS s ON s.scope_key = sj.scope_key
+JOIN jobs AS j ON j.id = sj.job_id
+WHERE s.scope_type = 'europe';
+
+CREATE VIEW IF NOT EXISTS country_jobs AS
+SELECT
+    sj.scope_key,
+    s.country_code AS scope_country_code,
+    s.label AS scope_label,
+    sj.eligibility AS scope_eligibility,
+    sj.eligibility_reason AS scope_eligibility_reason,
+    j.*
+FROM scope_jobs AS sj
+JOIN search_scopes AS s ON s.scope_key = sj.scope_key
+JOIN jobs AS j ON j.id = sj.job_id
+WHERE s.scope_type = 'country';
 """
 
 
@@ -89,6 +132,11 @@ class JobRepository:
         self.connection.execute("PRAGMA busy_timeout = 5000")
         self.connection.execute("PRAGMA journal_mode = WAL")
         self.connection.executescript(SCHEMA)
+        run_columns = {
+            row[1] for row in self.connection.execute("PRAGMA table_info(ingestion_runs)")
+        }
+        if "scope_key" not in run_columns:
+            self.connection.execute("ALTER TABLE ingestion_runs ADD COLUMN scope_key TEXT")
         self.connection.commit()
 
     def __enter__(self) -> "JobRepository":
@@ -101,14 +149,75 @@ class JobRepository:
             self.connection.rollback()
         self.connection.close()
 
-    def start_run(self, config: Mapping[str, Any]) -> str:
+    def ensure_scope(
+        self,
+        scope_key: str,
+        scope_type: str,
+        *,
+        country_code: str | None = None,
+        label: str,
+    ) -> None:
+        if scope_type not in {"europe", "country"}:
+            raise ValueError("scope_type must be 'europe' or 'country'")
+        normalized_country = country_code.strip().upper() if country_code else None
+        if scope_type == "country" and not normalized_country:
+            raise ValueError("country scopes require country_code")
+        if scope_type == "europe":
+            normalized_country = None
+        self.connection.execute(
+            """
+            INSERT INTO search_scopes (scope_key, scope_type, country_code, label, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(scope_key) DO UPDATE SET
+                scope_type=excluded.scope_type,
+                country_code=excluded.country_code,
+                label=excluded.label,
+                updated_at=excluded.updated_at
+            """,
+            (scope_key, scope_type, normalized_country, label, _now()),
+        )
+
+    def start_run(self, config: Mapping[str, Any], *, scope_key: str | None = None) -> str:
         run_id = str(uuid.uuid4())
         self.connection.execute(
-            "INSERT INTO ingestion_runs (id, started_at, status, config_json) VALUES (?, ?, 'running', ?)",
-            (run_id, _now(), json.dumps(config, ensure_ascii=False, sort_keys=True, default=str)),
+            """
+            INSERT INTO ingestion_runs (id, started_at, status, config_json, scope_key)
+            VALUES (?, ?, 'running', ?, ?)
+            """,
+            (
+                run_id,
+                _now(),
+                json.dumps(config, ensure_ascii=False, sort_keys=True, default=str),
+                scope_key,
+            ),
         )
         self.connection.commit()
         return run_id
+
+    def replace_scope_jobs(
+        self,
+        scope_key: str,
+        jobs: list[tuple[int, str, str]],
+        *,
+        commit: bool = True,
+    ) -> None:
+        self.connection.execute("DELETE FROM scope_jobs WHERE scope_key=?", (scope_key,))
+        unique_jobs = {
+            job_id: (eligibility, eligibility_reason)
+            for job_id, eligibility, eligibility_reason in jobs
+        }
+        self.connection.executemany(
+            """
+            INSERT INTO scope_jobs (scope_key, job_id, eligibility, eligibility_reason)
+            VALUES (?, ?, ?, ?)
+            """,
+            [
+                (scope_key, job_id, eligibility, eligibility_reason)
+                for job_id, (eligibility, eligibility_reason) in unique_jobs.items()
+            ],
+        )
+        if commit:
+            self.connection.commit()
 
     def save_job(
         self,
@@ -241,13 +350,32 @@ def inspect_database(database_path: str | Path, *, limit: int = 10) -> dict[str,
                 "SELECT eligibility, count(*) FROM jobs GROUP BY eligibility ORDER BY eligibility"
             ).fetchall()
         }
+        scopes = [
+            {
+                "scope_key": row[0],
+                "scope_type": row[1],
+                "country_code": row[2],
+                "label": row[3],
+                "jobs": int(row[4]),
+            }
+            for row in connection.execute(
+                "SELECT s.scope_key, s.scope_type, s.country_code, s.label, "
+                "count(sj.job_id) AS jobs FROM search_scopes AS s "
+                "LEFT JOIN scope_jobs AS sj ON sj.scope_key=s.scope_key "
+                "GROUP BY s.scope_key, s.scope_type, s.country_code, s.label "
+                "ORDER BY s.scope_type, s.scope_key"
+            ).fetchall()
+        ]
         technology_counts = [
             {"technology": row[0], "jobs": int(row[1])}
             for row in connection.execute(
                 "SELECT jt.technology, count(DISTINCT jt.job_id) AS jobs "
                 "FROM job_technologies AS jt JOIN jobs AS j ON j.id=jt.job_id "
-                "WHERE j.eligibility != 'rejected' GROUP BY jt.technology "
-                "ORDER BY jobs DESC, jt.technology ASC"
+                "WHERE EXISTS (SELECT 1 FROM scope_jobs AS selected_scope "
+                "WHERE selected_scope.job_id=j.id AND selected_scope.eligibility != 'rejected') "
+                "OR (NOT EXISTS (SELECT 1 FROM scope_jobs AS any_scope "
+                "WHERE any_scope.job_id=j.id) AND j.eligibility != 'rejected') "
+                "GROUP BY jt.technology ORDER BY jobs DESC, jt.technology ASC"
             ).fetchall()
         ]
         job_rows = connection.execute(
@@ -286,6 +414,7 @@ def inspect_database(database_path: str | Path, *, limit: int = 10) -> dict[str,
     return {
         "database_path": str(path),
         "counts": counts,
+        "scopes": scopes,
         "eligibility_counts": eligibility_counts,
         "technology_counts": technology_counts,
         "recent_jobs": recent_jobs,

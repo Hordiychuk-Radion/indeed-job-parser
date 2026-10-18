@@ -97,6 +97,12 @@ def test_pipeline_persists_all_decisions_and_exports_selected_rows(tmp_path: Pat
     assert database.execute("SELECT count(*) FROM jobs").fetchone()[0] == 4
     assert database.execute("SELECT count(*) FROM job_observations").fetchone()[0] == 4
     assert database.execute(
+        "SELECT count(*) FROM scope_jobs WHERE scope_key='country:CZ'"
+    ).fetchone()[0] == 4
+    assert database.execute(
+        "SELECT count(*) FROM country_jobs WHERE scope_country_code='CZ'"
+    ).fetchone()[0] == 4
+    assert database.execute(
         "SELECT eligibility_reason FROM jobs WHERE source_job_id='wrong-period'"
     ).fetchone()[0] == "salary_period_mismatch"
     database.close()

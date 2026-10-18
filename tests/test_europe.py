@@ -142,23 +142,29 @@ def test_europe_collection_keeps_attempt_snapshots_and_exports_clickable_selecte
     assert "Prison Officer" not in report
 
 
-def test_europe_collection_replaces_reused_database_with_current_selected_jobs(tmp_path: Path):
+def test_europe_collection_replaces_only_europe_scope_in_shared_database(tmp_path: Path):
     database_path = tmp_path / "jobs.db"
     with JobRepository(database_path) as repository:
-        run_id = repository.start_run({"mode": "legacy"})
-        rejected_id = repository.save_job(
+        repository.ensure_scope(
+            "country:DE", "country", country_code="DE", label="Germany"
+        )
+        repository.ensure_scope(
+            "europe:data-engineer", "europe", label="Europe Data Engineer"
+        )
+        run_id = repository.start_run({"mode": "seed"}, scope_key="country:DE")
+        country_job_id = repository.save_job(
             run_id,
             JobRecord(
-                dedupe_key="legacy-rejected",
+                dedupe_key="country-only",
                 source="indeed",
-                source_job_id="legacy-rejected",
+                source_job_id="country-only",
                 query="Data Engineer",
                 title="Prison Officer",
                 company="Other",
                 location="Berlin",
                 country_code="DE",
                 description="Mentions Python",
-                canonical_url="https://de.indeed.com/viewjob?jk=legacy-rejected",
+                canonical_url="https://de.indeed.com/viewjob?jk=country-only",
                 published_at=None,
                 employment_type=None,
                 is_remote=None,
@@ -169,22 +175,22 @@ def test_europe_collection_replaces_reused_database_with_current_selected_jobs(t
                 eligibility="rejected",
                 eligibility_reason="title_not_data_engineer",
             ),
-            {"legacy": True},
+            {"country": True},
         )
-        repository.replace_job_technologies(rejected_id, {"languages": ["Python"]})
-        stale_eligible_id = repository.save_job(
+        repository.replace_job_technologies(country_job_id, {"languages": ["Python"]})
+        stale_europe_id = repository.save_job(
             run_id,
             JobRecord(
-                dedupe_key="stale-eligible",
+                dedupe_key="stale-europe",
                 source="indeed",
-                source_job_id="stale-eligible",
+                source_job_id="stale-europe",
                 query="Data Engineer",
                 title="Data Engineer",
                 company="Old",
                 location="Paris",
                 country_code="FR",
                 description="Build Java pipelines",
-                canonical_url="https://fr.indeed.com/viewjob?jk=stale-eligible",
+                canonical_url="https://fr.indeed.com/viewjob?jk=stale-europe",
                 published_at=None,
                 employment_type=None,
                 is_remote=None,
@@ -195,9 +201,17 @@ def test_europe_collection_replaces_reused_database_with_current_selected_jobs(t
                 eligibility="eligible",
                 eligibility_reason="title_matches_data_engineer",
             ),
-            {"legacy": True},
+            {"europe": True},
         )
-        repository.replace_job_technologies(stale_eligible_id, {"languages": ["Java"]})
+        repository.replace_job_technologies(stale_europe_id, {"languages": ["Java"]})
+        repository.replace_scope_jobs(
+            "country:DE",
+            [(country_job_id, "rejected", "title_not_data_engineer")],
+        )
+        repository.replace_scope_jobs(
+            "europe:data-engineer",
+            [(stale_europe_id, "eligible", "title_matches_data_engineer")],
+        )
 
     def fake_scrape(**_kwargs):
         return pd.DataFrame(
@@ -222,14 +236,23 @@ def test_europe_collection_replaces_reused_database_with_current_selected_jobs(t
     )
 
     with sqlite3.connect(database_path) as connection:
-        assert connection.execute("SELECT source_job_id FROM jobs").fetchall() == [("data-1",)]
-        for old_id in (rejected_id, stale_eligible_id):
-            assert connection.execute(
-                "SELECT count(*) FROM job_observations WHERE job_id=?", (old_id,)
-            ).fetchone()[0] == 0
-            assert connection.execute(
-                "SELECT count(*) FROM job_technologies WHERE job_id=?", (old_id,)
-            ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT source_job_id FROM europe_jobs ORDER BY source_job_id"
+        ).fetchall() == [("data-1",)]
+        assert connection.execute(
+            "SELECT source_job_id FROM country_jobs ORDER BY source_job_id"
+        ).fetchall() == [("country-only",)]
+        assert connection.execute(
+            "SELECT count(*) FROM scope_jobs "
+            "WHERE scope_key='europe:data-engineer' AND job_id=?",
+            (stale_europe_id,),
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT count(*) FROM job_observations WHERE job_id=?", (country_job_id,)
+        ).fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT technology FROM job_technologies WHERE job_id=?", (country_job_id,)
+        ).fetchall() == [("Python",)]
 
 
 def test_largest_batch_is_not_reused_across_different_freshness_scopes(tmp_path: Path):

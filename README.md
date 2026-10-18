@@ -60,7 +60,7 @@ uv run indeed-jobs profiles
 uv run indeed-jobs create-profile
 ```
 
-Профілі зберігаються як TOML-файли у `config/profiles/`. Майстер запитує професії, seniority, країну, місто, кількість, давність, радіус, remote та experience policy і створює окремі SQLite/output paths.
+Профілі зберігаються як TOML-файли у `config/profiles/`. Майстер запитує професії, seniority, країну, місто, кількість, давність, радіус, remote та experience policy. Усі профілі використовують спільну `data/jobs.db`, але мають окремі output-директорії.
 
 Одноразовий пошук можна задати прямо в терміналі. `--config` необов'язковий і за замовчуванням використовує `config/example.toml`:
 
@@ -134,7 +134,7 @@ uv run indeed-jobs europe-data-engineer
 ```bash
 uv run indeed-jobs europe-data-engineer \
   --output-dir output/europe-data-engineer \
-  --database output/europe-data-engineer/jobs.db \
+  --database data/jobs.db \
   --days-old 30 \
   --limit 100 \
   --limit 500
@@ -150,7 +150,7 @@ Europe-результати:
 - `summary.json` — кількості, помилки по країнах і агрегований `technology_counts`;
 - `snapshots/<country>/<run-id>/limit-*.json` — повна відповідь кожної спроби;
 - `snapshots/<country>/largest-batch.json` — найбільша збережена вибірка країни.
-- `jobs.db` — актуальний snapshot тільки відібраних Europe-вакансій з descriptions, observations і нормалізованим стеком у `job_technologies`; кожен Europe-запуск замінює попередній snapshot, а відхилена raw-видача залишається у `jobs-all.json` та snapshots.
+- `data/jobs.db` — спільна база для Europe та однокраїнних запусків. `europe_jobs` показує актуальний Europe snapshot, `country_jobs` — country scopes; одна вакансія фізично зберігається в `jobs` лише раз. Відхилена Europe raw-видача залишається у `jobs-all.json` та snapshots.
 
 `stack` має стабільні категорії: `languages`, `cloud`, `data_platforms`,
 `processing_streaming`, `orchestration_transformation`, `databases`, `devops` і
@@ -161,7 +161,7 @@ Europe-результати:
 
 ```bash
 uv run indeed-jobs inspect-db \
-  --database output/europe-data-engineer/jobs.db \
+  --database data/jobs.db \
   --limit 10
 ```
 

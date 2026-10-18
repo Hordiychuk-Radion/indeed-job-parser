@@ -296,7 +296,7 @@ def test_europe_cli_uses_three_volume_attempts_by_default(tmp_path: Path):
 
     assert exit_code == 0
     assert received["limits"] == (100, 500, 1000)
-    assert received["database_path"] is None
+    assert received["database_path"] == Path("data/jobs.db")
 
 
 def test_cli_inspects_database_as_json(tmp_path: Path, capsys):

@@ -232,7 +232,9 @@ def collect_europe_data_engineers(
         technology for row in selected_rows for technology in row["stack_flat"]
     )
     resolved_database_path = Path(database_path) if database_path else directory / "jobs.db"
+    scope_key = "europe:data-engineer"
     with JobRepository(resolved_database_path) as repository:
+        repository.ensure_scope(scope_key, "europe", label="Europe Data Engineer")
         database_run_id = repository.start_run(
             {
                 "mode": "europe-data-engineer",
@@ -242,12 +244,11 @@ def collect_europe_data_engineers(
                 "limits": list(limit_list),
                 "days_old": days_old,
                 "distance_km": distance_km,
-            }
+            },
+            scope_key=scope_key,
         )
         try:
-            repository.connection.execute("DELETE FROM job_observations")
-            repository.connection.execute("DELETE FROM job_technologies")
-            repository.connection.execute("DELETE FROM jobs")
+            scope_memberships: list[tuple[int, str, str]] = []
             for job_payload in selected_jobs:
                 job = replace(
                     JobRecord(**job_payload),
@@ -268,6 +269,10 @@ def collect_europe_data_engineers(
                     extract_stack(f"{job.title}\n{job.description}"),
                     commit=False,
                 )
+                scope_memberships.append(
+                    (job_id, job.eligibility, job.eligibility_reason)
+                )
+            repository.replace_scope_jobs(scope_key, scope_memberships, commit=False)
             repository.finish_run(
                 database_run_id,
                 status="succeeded",

@@ -37,7 +37,7 @@ def test_rejects_unknown_or_unsafe_profile_names(tmp_path: Path):
         resolve_profile("../secret", tmp_path)
 
 
-def test_writes_loadable_profile_with_own_storage_paths(tmp_path: Path):
+def test_writes_loadable_profile_with_shared_database_and_own_output_path(tmp_path: Path):
     profile_path = write_profile(
         ProfileDraft(
             name="data-engineer-middle-de",
@@ -59,7 +59,7 @@ def test_writes_loadable_profile_with_own_storage_paths(tmp_path: Path):
     config = load_config(profile_path)
     assert config.search.queries == ("Data Engineer", "ETL Developer")
     assert config.filters.allowed_seniority == ("middle",)
-    assert config.storage.database_path == tmp_path / "data" / "profiles" / "data-engineer-middle-de.db"
+    assert config.storage.database_path == tmp_path / "data" / "jobs.db"
     assert config.storage.output_dir == tmp_path / "output" / "profiles" / "data-engineer-middle-de"
 
 

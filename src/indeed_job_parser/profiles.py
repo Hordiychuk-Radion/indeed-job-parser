@@ -87,7 +87,7 @@ def write_profile(draft: ProfileDraft, profiles_dir: str | Path) -> Path:
         f"{seniority_line}"
         f"include_title_patterns = {_toml_list(draft.titles)}\n"
         "\n[storage]\n"
-        f'database_path = "../../data/profiles/{draft.name}.db"\n'
+        'database_path = "../../data/jobs.db"\n'
         f'output_dir = "../../output/profiles/{draft.name}"\n'
     )
     path.write_text(content, encoding="utf-8")

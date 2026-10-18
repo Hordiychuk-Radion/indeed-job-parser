@@ -16,6 +16,7 @@ from .repository import inspect_database
 
 DEFAULT_CONFIG = Path("config/example.toml")
 DEFAULT_PROFILES_DIR = Path("config/profiles")
+DEFAULT_DATABASE = Path("data/jobs.db")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -85,14 +86,15 @@ def build_parser() -> argparse.ArgumentParser:
     europe.add_argument(
         "--database",
         type=Path,
-        help="SQLite path; defaults to <output-dir>/jobs.db",
+        default=DEFAULT_DATABASE,
+        help="Shared SQLite path; defaults to data/jobs.db",
     )
 
     inspect = subparsers.add_parser("inspect-db", help="Show SQLite contents as JSON")
     inspect.add_argument(
         "--database",
         type=Path,
-        default=Path("output/europe-data-engineer/jobs.db"),
+        default=DEFAULT_DATABASE,
         help="SQLite database path",
     )
     inspect.add_argument(
