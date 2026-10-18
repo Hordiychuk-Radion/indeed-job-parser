@@ -123,8 +123,8 @@
             "type": "frser-sqlite-datasource",
             "uid": "jobs-sqlite"
           },
-          "queryText": "SELECT COUNT(DISTINCT country_code) AS Countries FROM europe_jobs e",
-          "rawQueryText": "SELECT COUNT(DISTINCT country_code) AS Countries FROM europe_jobs e",
+          "queryText": "SELECT COUNT(DISTINCT country_code) AS Countries FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
+          "rawQueryText": "SELECT COUNT(DISTINCT country_code) AS Countries FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
           "queryType": "table",
           "refId": "A"
         }
@@ -351,8 +351,8 @@
             "type": "frser-sqlite-datasource",
             "uid": "jobs-sqlite"
           },
-          "queryText": "SELECT country_code AS Country, COUNT(*) AS Vacancies, COUNT(DISTINCT company) AS Companies, SUM(CASE WHEN is_remote = 1 THEN 1 ELSE 0 END) AS Remote, ROUND(100.0 * SUM(CASE WHEN is_remote = 1 THEN 1 ELSE 0 END) / COUNT(*), 1) AS 'Remote %', SUM(CASE WHEN scope_eligibility = 'eligible' THEN 1 ELSE 0 END) AS 'Confirmed ≤5y', SUM(CASE WHEN scope_eligibility = 'unknown' THEN 1 ELSE 0 END) AS 'Needs review' FROM europe_jobs e GROUP BY country_code ORDER BY Vacancies DESC",
-          "rawQueryText": "SELECT country_code AS Country, COUNT(*) AS Vacancies, COUNT(DISTINCT company) AS Companies, SUM(CASE WHEN is_remote = 1 THEN 1 ELSE 0 END) AS Remote, ROUND(100.0 * SUM(CASE WHEN is_remote = 1 THEN 1 ELSE 0 END) / COUNT(*), 1) AS 'Remote %', SUM(CASE WHEN scope_eligibility = 'eligible' THEN 1 ELSE 0 END) AS 'Confirmed ≤5y', SUM(CASE WHEN scope_eligibility = 'unknown' THEN 1 ELSE 0 END) AS 'Needs review' FROM europe_jobs e GROUP BY country_code ORDER BY Vacancies DESC",
+          "queryText": "SELECT country_code AS Country, COUNT(*) AS Vacancies, COUNT(DISTINCT company) AS Companies, SUM(CASE WHEN is_remote = 1 THEN 1 ELSE 0 END) AS Remote, ROUND(100.0 * SUM(CASE WHEN is_remote = 1 THEN 1 ELSE 0 END) / COUNT(*), 1) AS 'Remote %', SUM(CASE WHEN scope_eligibility = 'eligible' THEN 1 ELSE 0 END) AS 'Confirmed ≤5y', SUM(CASE WHEN scope_eligibility = 'unknown' THEN 1 ELSE 0 END) AS 'Needs review' FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY country_code ORDER BY Vacancies DESC",
+          "rawQueryText": "SELECT country_code AS Country, COUNT(*) AS Vacancies, COUNT(DISTINCT company) AS Companies, SUM(CASE WHEN is_remote = 1 THEN 1 ELSE 0 END) AS Remote, ROUND(100.0 * SUM(CASE WHEN is_remote = 1 THEN 1 ELSE 0 END) / COUNT(*), 1) AS 'Remote %', SUM(CASE WHEN scope_eligibility = 'eligible' THEN 1 ELSE 0 END) AS 'Confirmed ≤5y', SUM(CASE WHEN scope_eligibility = 'unknown' THEN 1 ELSE 0 END) AS 'Needs review' FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY country_code ORDER BY Vacancies DESC",
           "queryType": "table",
           "refId": "A"
         }
@@ -412,8 +412,8 @@
             "type": "frser-sqlite-datasource",
             "uid": "jobs-sqlite"
           },
-          "queryText": "SELECT country_code AS Country, SUM(CASE WHEN is_remote = 1 THEN 1 ELSE 0 END) AS Remote FROM europe_jobs e GROUP BY country_code HAVING Remote > 0 ORDER BY Remote DESC",
-          "rawQueryText": "SELECT country_code AS Country, SUM(CASE WHEN is_remote = 1 THEN 1 ELSE 0 END) AS Remote FROM europe_jobs e GROUP BY country_code HAVING Remote > 0 ORDER BY Remote DESC",
+          "queryText": "SELECT country_code AS Country, SUM(CASE WHEN is_remote = 1 THEN 1 ELSE 0 END) AS Remote FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY country_code HAVING Remote > 0 ORDER BY Remote DESC",
+          "rawQueryText": "SELECT country_code AS Country, SUM(CASE WHEN is_remote = 1 THEN 1 ELSE 0 END) AS Remote FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY country_code HAVING Remote > 0 ORDER BY Remote DESC",
           "queryType": "table",
           "refId": "A"
         }
@@ -462,8 +462,8 @@
             "type": "frser-sqlite-datasource",
             "uid": "jobs-sqlite"
           },
-          "queryText": "WITH ranked AS (SELECT e.country_code, jt.technology, COUNT(DISTINCT jt.job_id) AS vacancies, ROW_NUMBER() OVER (PARTITION BY e.country_code ORDER BY COUNT(DISTINCT jt.job_id) DESC, jt.technology) AS rn FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id GROUP BY e.country_code, jt.technology) SELECT country_code AS Country, technology AS 'Top technology', vacancies AS Vacancies FROM ranked WHERE rn = 1 ORDER BY Vacancies DESC",
-          "rawQueryText": "WITH ranked AS (SELECT e.country_code, jt.technology, COUNT(DISTINCT jt.job_id) AS vacancies, ROW_NUMBER() OVER (PARTITION BY e.country_code ORDER BY COUNT(DISTINCT jt.job_id) DESC, jt.technology) AS rn FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id GROUP BY e.country_code, jt.technology) SELECT country_code AS Country, technology AS 'Top technology', vacancies AS Vacancies FROM ranked WHERE rn = 1 ORDER BY Vacancies DESC",
+          "queryText": "WITH ranked AS (SELECT e.country_code, jt.technology, COUNT(DISTINCT jt.job_id) AS vacancies, ROW_NUMBER() OVER (PARTITION BY e.country_code ORDER BY COUNT(DISTINCT jt.job_id) DESC, jt.technology) AS rn FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY e.country_code, jt.technology) SELECT country_code AS Country, technology AS 'Top technology', vacancies AS Vacancies FROM ranked WHERE rn = 1 ORDER BY Vacancies DESC",
+          "rawQueryText": "WITH ranked AS (SELECT e.country_code, jt.technology, COUNT(DISTINCT jt.job_id) AS vacancies, ROW_NUMBER() OVER (PARTITION BY e.country_code ORDER BY COUNT(DISTINCT jt.job_id) DESC, jt.technology) AS rn FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY e.country_code, jt.technology) SELECT country_code AS Country, technology AS 'Top technology', vacancies AS Vacancies FROM ranked WHERE rn = 1 ORDER BY Vacancies DESC",
           "queryType": "table",
           "refId": "A"
         }

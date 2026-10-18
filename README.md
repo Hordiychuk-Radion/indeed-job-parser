@@ -200,7 +200,8 @@ open http://127.0.0.1:3001/d/jobs-overview
 
 Provisioning автоматично створює SQLite datasource та п'ять пов'язаних dashboards:
 
-- **Overview** — вакансії, країни, компанії, remote share і дати публікації;
+- **Overview** — головний tech-focused екран: top technologies, requirement mix,
+  категорії інструментів, engineering concepts і типові required-пари;
 - **Technology Demand** — required, preferred, alternative та mentioned stack;
 - **Geography** — географічне покриття, remote і технології за країнами;
 - **Candidate Fit** — підтверджені ≤5 років та unknown для review без несумісних

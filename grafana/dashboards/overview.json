@@ -132,7 +132,7 @@
     },
     {
       "id": 2,
-      "title": "Countries",
+      "title": "Technologies tracked",
       "type": "stat",
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -182,8 +182,8 @@
             "type": "frser-sqlite-datasource",
             "uid": "jobs-sqlite"
           },
-          "queryText": "SELECT COUNT(DISTINCT country_code) AS Countries FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
-          "rawQueryText": "SELECT COUNT(DISTINCT country_code) AS Countries FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
+          "queryText": "SELECT COUNT(DISTINCT jt.technology) AS Technologies FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
+          "rawQueryText": "SELECT COUNT(DISTINCT jt.technology) AS Technologies FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
           "queryType": "table",
           "refId": "A"
         }
@@ -191,7 +191,7 @@
     },
     {
       "id": 3,
-      "title": "Companies",
+      "title": "Vacancies requiring tools",
       "type": "stat",
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -241,8 +241,8 @@
             "type": "frser-sqlite-datasource",
             "uid": "jobs-sqlite"
           },
-          "queryText": "SELECT COUNT(DISTINCT company) AS Companies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
-          "rawQueryText": "SELECT COUNT(DISTINCT company) AS Companies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
+          "queryText": "SELECT COUNT(DISTINCT jt.job_id) AS Vacancies FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND jt.requirement_type = 'required'",
+          "rawQueryText": "SELECT COUNT(DISTINCT jt.job_id) AS Vacancies FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND jt.requirement_type = 'required'",
           "queryType": "table",
           "refId": "A"
         }
@@ -250,7 +250,7 @@
     },
     {
       "id": 4,
-      "title": "Remote share",
+      "title": "Required-tool coverage",
       "type": "stat",
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -301,8 +301,8 @@
             "type": "frser-sqlite-datasource",
             "uid": "jobs-sqlite"
           },
-          "queryText": "SELECT ROUND(100.0 * SUM(CASE WHEN is_remote = 1 THEN 1 ELSE 0 END) / COUNT(*), 1) AS 'Remote %' FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
-          "rawQueryText": "SELECT ROUND(100.0 * SUM(CASE WHEN is_remote = 1 THEN 1 ELSE 0 END) / COUNT(*), 1) AS 'Remote %' FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
+          "queryText": "SELECT ROUND(100.0 * COUNT(DISTINCT CASE WHEN jt.requirement_type = 'required' THEN e.id END) / COUNT(DISTINCT e.id), 1) AS Coverage FROM europe_jobs e LEFT JOIN job_technologies jt ON jt.job_id = e.id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
+          "rawQueryText": "SELECT ROUND(100.0 * COUNT(DISTINCT CASE WHEN jt.requirement_type = 'required' THEN e.id END) / COUNT(DISTINCT e.id), 1) AS Coverage FROM europe_jobs e LEFT JOIN job_technologies jt ON jt.job_id = e.id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring})",
           "queryType": "table",
           "refId": "A"
         }
@@ -310,7 +310,7 @@
     },
     {
       "id": 5,
-      "title": "Vacancies by country",
+      "title": "Top technologies",
       "type": "barchart",
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -319,8 +319,8 @@
       "gridPos": {
         "x": 0,
         "y": 4,
-        "w": 12,
-        "h": 9
+        "w": 10,
+        "h": 12
       },
       "fieldConfig": {
         "defaults": {
@@ -362,8 +362,8 @@
             "type": "frser-sqlite-datasource",
             "uid": "jobs-sqlite"
           },
-          "queryText": "SELECT country_code AS Country, COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY country_code ORDER BY Vacancies DESC",
-          "rawQueryText": "SELECT country_code AS Country, COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY country_code ORDER BY Vacancies DESC",
+          "queryText": "SELECT jt.technology AS Technology, COUNT(DISTINCT jt.job_id) AS Vacancies FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY jt.technology ORDER BY Vacancies DESC LIMIT 20",
+          "rawQueryText": "SELECT jt.technology AS Technology, COUNT(DISTINCT jt.job_id) AS Vacancies FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY jt.technology ORDER BY Vacancies DESC LIMIT 20",
           "queryType": "table",
           "refId": "A"
         }
@@ -371,17 +371,17 @@
     },
     {
       "id": 6,
-      "title": "Top companies",
+      "title": "Requirement mix by technology",
       "type": "barchart",
       "datasource": {
         "type": "frser-sqlite-datasource",
         "uid": "jobs-sqlite"
       },
       "gridPos": {
-        "x": 12,
+        "x": 10,
         "y": 4,
-        "w": 12,
-        "h": 9
+        "w": 14,
+        "h": 12
       },
       "fieldConfig": {
         "defaults": {
@@ -423,8 +423,8 @@
             "type": "frser-sqlite-datasource",
             "uid": "jobs-sqlite"
           },
-          "queryText": "SELECT company AS Company, COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY company ORDER BY Vacancies DESC LIMIT 15",
-          "rawQueryText": "SELECT company AS Company, COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY company ORDER BY Vacancies DESC LIMIT 15",
+          "queryText": "SELECT jt.technology AS Technology, COUNT(DISTINCT CASE WHEN jt.requirement_type = 'required' THEN jt.job_id END) AS Required, COUNT(DISTINCT CASE WHEN jt.requirement_type = 'preferred' THEN jt.job_id END) AS Preferred, COUNT(DISTINCT CASE WHEN jt.requirement_type = 'alternative' THEN jt.job_id END) AS Alternative, COUNT(DISTINCT CASE WHEN jt.requirement_type = 'mentioned' THEN jt.job_id END) AS Mentioned FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY jt.technology ORDER BY Required DESC, Preferred DESC, Mentioned DESC LIMIT 15",
+          "rawQueryText": "SELECT jt.technology AS Technology, COUNT(DISTINCT CASE WHEN jt.requirement_type = 'required' THEN jt.job_id END) AS Required, COUNT(DISTINCT CASE WHEN jt.requirement_type = 'preferred' THEN jt.job_id END) AS Preferred, COUNT(DISTINCT CASE WHEN jt.requirement_type = 'alternative' THEN jt.job_id END) AS Alternative, COUNT(DISTINCT CASE WHEN jt.requirement_type = 'mentioned' THEN jt.job_id END) AS Mentioned FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY jt.technology ORDER BY Required DESC, Preferred DESC, Mentioned DESC LIMIT 15",
           "queryType": "table",
           "refId": "A"
         }
@@ -432,7 +432,7 @@
     },
     {
       "id": 7,
-      "title": "Vacancies by publication date",
+      "title": "Demand by tool category",
       "type": "barchart",
       "datasource": {
         "type": "frser-sqlite-datasource",
@@ -440,9 +440,9 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 13,
-        "w": 12,
-        "h": 9
+        "y": 16,
+        "w": 8,
+        "h": 11
       },
       "fieldConfig": {
         "defaults": {
@@ -484,8 +484,8 @@
             "type": "frser-sqlite-datasource",
             "uid": "jobs-sqlite"
           },
-          "queryText": "SELECT published_at AS Date, COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY published_at ORDER BY published_at",
-          "rawQueryText": "SELECT published_at AS Date, COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY published_at ORDER BY published_at",
+          "queryText": "SELECT jt.category AS Category, COUNT(DISTINCT jt.job_id) AS Vacancies FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY jt.category ORDER BY Vacancies DESC",
+          "rawQueryText": "SELECT jt.category AS Category, COUNT(DISTINCT jt.job_id) AS Vacancies FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY jt.category ORDER BY Vacancies DESC",
           "queryType": "table",
           "refId": "A"
         }
@@ -493,17 +493,17 @@
     },
     {
       "id": 8,
-      "title": "Employment type coverage",
+      "title": "Engineering concepts",
       "type": "barchart",
       "datasource": {
         "type": "frser-sqlite-datasource",
         "uid": "jobs-sqlite"
       },
       "gridPos": {
-        "x": 12,
-        "y": 13,
-        "w": 12,
-        "h": 9
+        "x": 8,
+        "y": 16,
+        "w": 8,
+        "h": 11
       },
       "fieldConfig": {
         "defaults": {
@@ -545,8 +545,58 @@
             "type": "frser-sqlite-datasource",
             "uid": "jobs-sqlite"
           },
-          "queryText": "SELECT COALESCE(NULLIF(employment_type, ''), 'Unknown') AS Type, COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY Type ORDER BY Vacancies DESC",
-          "rawQueryText": "SELECT COALESCE(NULLIF(employment_type, ''), 'Unknown') AS Type, COUNT(*) AS Vacancies FROM europe_jobs e WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY Type ORDER BY Vacancies DESC",
+          "queryText": "SELECT jc.concept AS Concept, COUNT(DISTINCT jc.job_id) AS Vacancies FROM job_concepts jc JOIN europe_jobs e ON e.id = jc.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY jc.concept ORDER BY Vacancies DESC LIMIT 15",
+          "rawQueryText": "SELECT jc.concept AS Concept, COUNT(DISTINCT jc.job_id) AS Vacancies FROM job_concepts jc JOIN europe_jobs e ON e.id = jc.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) GROUP BY jc.concept ORDER BY Vacancies DESC LIMIT 15",
+          "queryType": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Common required tool pairs",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 16,
+        "w": 8,
+        "h": 11
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "WITH required_tools AS (SELECT DISTINCT jt.job_id, jt.technology FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND jt.requirement_type = 'required') SELECT a.technology || ' + ' || b.technology AS Pair, COUNT(DISTINCT a.job_id) AS Vacancies FROM required_tools a JOIN required_tools b ON a.job_id = b.job_id AND a.technology < b.technology GROUP BY a.technology, b.technology ORDER BY Vacancies DESC, Pair LIMIT 20",
+          "rawQueryText": "WITH required_tools AS (SELECT DISTINCT jt.job_id, jt.technology FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE (${country:sqlstring} = '__all' OR e.country_code = ${country:sqlstring}) AND jt.requirement_type = 'required') SELECT a.technology || ' + ' || b.technology AS Pair, COUNT(DISTINCT a.job_id) AS Vacancies FROM required_tools a JOIN required_tools b ON a.job_id = b.job_id AND a.technology < b.technology GROUP BY a.technology, b.technology ORDER BY Vacancies DESC, Pair LIMIT 20",
           "queryType": "table",
           "refId": "A"
         }

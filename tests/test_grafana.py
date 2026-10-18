@@ -63,12 +63,22 @@ def _test_database() -> sqlite3.Connection:
             section TEXT,
             evidence_text TEXT
         );
+        CREATE TABLE job_concepts (
+            job_id INTEGER,
+            concept TEXT,
+            requirement_type TEXT,
+            section TEXT,
+            evidence_text TEXT
+        );
         INSERT INTO europe_jobs VALUES (
             1, 'Data Engineer', 'Example', 'CZ', 'Prague', 1,
             'eligible', 3, '2026-10-12', 'fulltime', 'https://example.com/job/1'
         );
         INSERT INTO job_technologies VALUES (
             1, 'languages', 'Python', 'required', 'Requirements', 'Python is required.'
+        );
+        INSERT INTO job_concepts VALUES (
+            1, 'ETL/ELT', 'required', 'Requirements', 'ETL experience is required.'
         );
         """
     )
@@ -195,3 +205,35 @@ def test_candidate_fit_excludes_incompatible_titles_and_unconfirmed_senior_roles
         assert f"%{marker}%" in queries
     assert "not like '%senior%'" in queries
     assert "scope_eligibility = 'eligible'" in queries
+
+
+def test_every_geography_panel_honors_the_country_filter():
+    dashboard = json.loads((DASHBOARD_DIR / "geography.json").read_text(encoding="utf-8"))
+
+    for panel in _panels(dashboard):
+        for target in panel["targets"]:
+            assert "${country:sqlstring}" in target["queryText"], panel["title"]
+
+
+def test_overview_prioritizes_tool_demand_instead_of_general_market_charts():
+    dashboard = json.loads((DASHBOARD_DIR / "overview.json").read_text(encoding="utf-8"))
+    titles = {panel["title"] for panel in _panels(dashboard)}
+
+    assert {
+        "Technologies tracked",
+        "Required-tool coverage",
+        "Top technologies",
+        "Requirement mix by technology",
+        "Demand by tool category",
+        "Common required tool pairs",
+        "Engineering concepts",
+    } <= titles
+    assert not {"Vacancies by country", "Top companies", "Vacancies by publication date"} & titles
+
+    queries = "\n".join(
+        target["queryText"]
+        for panel in _panels(dashboard)
+        for target in panel["targets"]
+    )
+    assert "COUNT(DISTINCT jt.job_id)" in queries
+    assert "job_concepts" in queries
