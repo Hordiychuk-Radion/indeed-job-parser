@@ -1,4 +1,5 @@
 import json
+import sqlite3
 from pathlib import Path
 
 import pandas as pd
@@ -66,6 +67,37 @@ def test_europe_collection_keeps_attempt_snapshots_and_exports_clickable_selecte
     assert summary.raw_unique_jobs == 2
     assert summary.selected_data_engineers == 1
     assert summary.error_count == 0
+    assert summary.database_path == str(tmp_path / "jobs.db")
+
+    with sqlite3.connect(summary.database_path) as connection:
+        stored = connection.execute(
+            "SELECT title, description, eligibility, eligibility_reason FROM jobs ORDER BY title"
+        ).fetchall()
+        technologies = connection.execute(
+            "SELECT category, technology FROM job_technologies "
+            "JOIN jobs ON jobs.id = job_technologies.job_id "
+            "WHERE jobs.source_job_id='data-1' ORDER BY category, technology"
+        ).fetchall()
+    assert stored == [
+        (
+            "Prison Officer",
+            "The application data is processed securely",
+            "rejected",
+            "title_not_data_engineer",
+        ),
+        (
+            "Senior Data Engineer",
+            "Build Python and SQL pipelines with Airflow on AWS",
+            "eligible",
+            "title_matches_data_engineer",
+        ),
+    ]
+    assert technologies == [
+        ("cloud", "AWS"),
+        ("languages", "Python"),
+        ("languages", "SQL"),
+        ("orchestration_transformation", "Apache Airflow"),
+    ]
 
     snapshots = tmp_path / "snapshots" / "germany" / "test-run"
     assert (snapshots / "limit-2.json").exists()

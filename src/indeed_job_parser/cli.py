@@ -11,6 +11,7 @@ from .config import ConfigOverrides
 from .europe import EuropeSummary, collect_europe_data_engineers
 from .pipeline import RunSummary, run_pipeline
 from .profiles import ProfileDraft, discover_profiles, resolve_profile, write_profile
+from .repository import inspect_database
 
 
 DEFAULT_CONFIG = Path("config/example.toml")
@@ -80,6 +81,25 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=3650,
         help="Freshness window; default effectively includes all active listings",
+    )
+    europe.add_argument(
+        "--database",
+        type=Path,
+        help="SQLite path; defaults to <output-dir>/jobs.db",
+    )
+
+    inspect = subparsers.add_parser("inspect-db", help="Show SQLite contents as JSON")
+    inspect.add_argument(
+        "--database",
+        type=Path,
+        default=Path("output/europe-data-engineer/jobs.db"),
+        help="SQLite database path",
+    )
+    inspect.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        help="Number of recent jobs to include",
     )
     return parser
 
@@ -245,6 +265,7 @@ def main(
     *,
     runner: Callable[..., RunSummary] = run_pipeline,
     europe_runner: Callable[..., EuropeSummary] = collect_europe_data_engineers,
+    database_inspector: Callable[..., dict[str, object]] = inspect_database,
     input_fn: Callable[[str], str] = input,
     profiles_dir: Path = DEFAULT_PROFILES_DIR,
 ) -> int:
@@ -260,10 +281,24 @@ def main(
     if args.command == "create-profile":
         _create_profile_wizard(args.profiles_dir, input_fn)
         return 0
+    if args.command == "inspect-db":
+        print(
+            json.dumps(
+                database_inspector(args.database, limit=args.limit),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
     if args.command == "europe-data-engineer":
         limits = tuple(args.limits) if args.limits else (100, 500, 1000)
         return _print_europe_summary(
-            europe_runner(args.output_dir, limits=limits, days_old=args.days_old)
+            europe_runner(
+                args.output_dir,
+                limits=limits,
+                days_old=args.days_old,
+                database_path=args.database,
+            )
         )
     if args.command == "run":
         if args.profile and args.config:

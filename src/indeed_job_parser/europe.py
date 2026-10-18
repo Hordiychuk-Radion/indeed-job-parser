@@ -4,14 +4,16 @@ import json
 import re
 import unicodedata
 from collections import Counter
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from .collector import collect_indeed
 from .config import SearchConfig
+from .models import JobRecord
 from .normalizer import normalize_record
+from .repository import JobRepository
 from .stack import extract_stack, flatten_stack
 
 
@@ -28,6 +30,8 @@ class EuropeSummary:
     selected_data_engineers: int
     error_count: int
     output_dir: str
+    database_path: str = ""
+    database_run_id: str = ""
 
 
 EUROPE_COUNTRIES = (
@@ -131,6 +135,7 @@ def collect_europe_data_engineers(
     distance_km: int = 1000,
     scrape_fn: Callable[..., Any] | None = None,
     run_id: str | None = None,
+    database_path: str | Path | None = None,
 ) -> EuropeSummary:
     directory = Path(output_dir)
     run_key = run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -226,6 +231,68 @@ def collect_europe_data_engineers(
     technology_counts = Counter(
         technology for row in selected_rows for technology in row["stack_flat"]
     )
+    resolved_database_path = Path(database_path) if database_path else directory / "jobs.db"
+    with JobRepository(resolved_database_path) as repository:
+        database_run_id = repository.start_run(
+            {
+                "mode": "europe-data-engineer",
+                "collector_run_id": run_key,
+                "query": "Data Engineer",
+                "countries": [asdict(country) for country in country_list],
+                "limits": list(limit_list),
+                "days_old": days_old,
+                "distance_km": distance_km,
+            }
+        )
+        try:
+            for job_payload in all_jobs:
+                job = JobRecord(**job_payload)
+                title_matches = _DATA_ENGINEER_RE.search(job.title) is not None
+                job = replace(
+                    job,
+                    eligibility="eligible" if title_matches else "rejected",
+                    eligibility_reason=(
+                        "title_matches_data_engineer"
+                        if title_matches
+                        else "title_not_data_engineer"
+                    ),
+                )
+                job_id = repository.save_job(
+                    database_run_id,
+                    job,
+                    {
+                        "persistence_source": "largest_normalized_country_snapshot",
+                        "normalized_job": job_payload,
+                    },
+                    commit=False,
+                )
+                repository.replace_job_technologies(
+                    job_id,
+                    extract_stack(f"{job.title}\n{job.description}"),
+                    commit=False,
+                )
+            repository.finish_run(
+                database_run_id,
+                status="succeeded",
+                rows_received=len(all_jobs),
+                rows_eligible=len(selected_jobs),
+                rows_unknown=0,
+                rows_rejected=len(all_jobs) - len(selected_jobs),
+                error_count=error_count,
+            )
+        except Exception as exc:
+            repository.connection.rollback()
+            repository.finish_run(
+                database_run_id,
+                status="failed",
+                rows_received=0,
+                rows_eligible=0,
+                rows_unknown=0,
+                rows_rejected=0,
+                error_count=error_count + 1,
+                error_message=f"{type(exc).__name__}: {exc}",
+            )
+            raise
     _write_json(directory / "jobs-all.json", all_jobs)
     _write_json(directory / "jobs-selected.json", selected_rows)
     summary_payload = {
@@ -234,6 +301,8 @@ def collect_europe_data_engineers(
         "raw_unique_jobs": len(all_jobs),
         "selected_data_engineers": len(selected_rows),
         "technology_counts": dict(technology_counts.most_common()),
+        "database_path": str(resolved_database_path),
+        "database_run_id": database_run_id,
         "error_count": error_count,
         "countries": country_summaries,
     }
@@ -268,4 +337,6 @@ def collect_europe_data_engineers(
         selected_data_engineers=len(selected_rows),
         error_count=error_count,
         output_dir=str(directory),
+        database_path=str(resolved_database_path),
+        database_run_id=database_run_id,
     )

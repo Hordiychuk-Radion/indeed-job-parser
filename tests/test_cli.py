@@ -238,10 +238,11 @@ def test_menu_runs_quick_search_without_saving_profile(tmp_path: Path):
 def test_cli_runs_europe_data_engineer_collection(tmp_path: Path, capsys):
     received = {}
 
-    def fake_europe_runner(output_dir, *, limits, days_old):
+    def fake_europe_runner(output_dir, *, limits, days_old, database_path):
         received["output_dir"] = output_dir
         received["limits"] = limits
         received["days_old"] = days_old
+        received["database_path"] = database_path
         return EuropeSummary(
             countries_completed=32,
             raw_unique_jobs=12018,
@@ -251,6 +252,7 @@ def test_cli_runs_europe_data_engineer_collection(tmp_path: Path, capsys):
         )
 
     output_dir = tmp_path / "europe"
+    database = tmp_path / "europe.db"
     exit_code = main(
         [
             "europe-data-engineer",
@@ -262,6 +264,8 @@ def test_cli_runs_europe_data_engineer_collection(tmp_path: Path, capsys):
             "500",
             "--days-old",
             "3650",
+            "--database",
+            str(database),
         ],
         europe_runner=fake_europe_runner,
     )
@@ -271,6 +275,7 @@ def test_cli_runs_europe_data_engineer_collection(tmp_path: Path, capsys):
         "output_dir": output_dir,
         "limits": (100, 500),
         "days_old": 3650,
+        "database_path": database,
     }
     payload = json.loads(capsys.readouterr().out)
     assert payload["selected_data_engineers"] == 2331
@@ -279,8 +284,9 @@ def test_cli_runs_europe_data_engineer_collection(tmp_path: Path, capsys):
 def test_europe_cli_uses_three_volume_attempts_by_default(tmp_path: Path):
     received = {}
 
-    def fake_europe_runner(output_dir, *, limits, days_old):
+    def fake_europe_runner(output_dir, *, limits, days_old, database_path):
         received["limits"] = limits
+        received["database_path"] = database_path
         return EuropeSummary(32, 0, 0, 0, str(output_dir))
 
     exit_code = main(
@@ -290,3 +296,23 @@ def test_europe_cli_uses_three_volume_attempts_by_default(tmp_path: Path):
 
     assert exit_code == 0
     assert received["limits"] == (100, 500, 1000)
+    assert received["database_path"] is None
+
+
+def test_cli_inspects_database_as_json(tmp_path: Path, capsys):
+    database = tmp_path / "jobs.db"
+    received = {}
+
+    def fake_inspector(path, *, limit):
+        received["path"] = path
+        received["limit"] = limit
+        return {"counts": {"jobs": 3}, "recent_jobs": []}
+
+    exit_code = main(
+        ["inspect-db", "--database", str(database), "--limit", "7"],
+        database_inspector=fake_inspector,
+    )
+
+    assert exit_code == 0
+    assert received == {"path": database, "limit": 7}
+    assert json.loads(capsys.readouterr().out)["counts"]["jobs"] == 3

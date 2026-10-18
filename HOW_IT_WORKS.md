@@ -13,7 +13,7 @@ stack.py → категоризований technology stack
     ↓
 eligibility.py → eligible / unknown / rejected
     ↓
-repository.py → SQLite
+repository.py → SQLite: jobs / observations / job_technologies
     ↓
 exporter.py → CSV / JSON / report.md
 ```
@@ -128,6 +128,12 @@ Europe-збір також не запускає країни паралельн
 структуровані поля для переліку й підрахунку технологій; вони не намагаються
 повторно інтерпретувати текст вакансії. Це робить JSON джерелом даних для
 подальшого звіту.
+
+Europe-збір також записує дедупліковані вакансії у SQLite. `jobs.description`
+містить актуальний нормалізований опис, `job_observations.raw_payload` — payload
+конкретного спостереження, а `job_technologies` — нормалізовані пари
+`category + technology`. Команда `indeed-jobs inspect-db` читає ці таблиці й
+повертає машинозрозумілий JSON для ручної перевірки або наступного звіту.
 
 ## 8. Тести
 

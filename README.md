@@ -134,6 +134,7 @@ uv run indeed-jobs europe-data-engineer
 ```bash
 uv run indeed-jobs europe-data-engineer \
   --output-dir output/europe-data-engineer \
+  --database output/europe-data-engineer/jobs.db \
   --days-old 30 \
   --limit 100 \
   --limit 500
@@ -149,11 +150,24 @@ Europe-результати:
 - `summary.json` — кількості, помилки по країнах і агрегований `technology_counts`;
 - `snapshots/<country>/<run-id>/limit-*.json` — повна відповідь кожної спроби;
 - `snapshots/<country>/largest-batch.json` — найбільша збережена вибірка країни.
+- `jobs.db` — SQLite з описами, ingestion history, observations і нормалізованим стеком у `job_technologies`.
 
 `stack` має стабільні категорії: `languages`, `cloud`, `data_platforms`,
 `processing_streaming`, `orchestration_transformation`, `databases`, `devops` і
 `analytics_bi`. Пошук словниковий і не вигадує технології, яких немає в тексті;
 невідомі або не згадані інструменти залишають відповідну категорію порожньою.
+
+Переглянути базу без написання SQL:
+
+```bash
+uv run indeed-jobs inspect-db \
+  --database output/europe-data-engineer/jobs.db \
+  --limit 10
+```
+
+Команда друкує JSON із кількістю вакансій, запусків і спостережень, розподілом
+eligibility, частотою технологій та останніми вакансіями разом з description і stack.
+Для графічного перегляду той самий `jobs.db` можна відкрити у DB Browser for SQLite.
 
 Результати:
 
