@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -28,6 +29,7 @@ def test_europe_collection_keeps_attempt_snapshots_and_exports_clickable_selecte
                         "location": "Berlin, DE",
                         "description": "Build Python and SQL pipelines with Airflow on AWS",
                         "job_url": "https://de.indeed.com/viewjob?jk=data-1&utm_source=test",
+                        "date_posted": "2026-10-10",
                     },
                     {
                         "id": "other-1",
@@ -37,6 +39,7 @@ def test_europe_collection_keeps_attempt_snapshots_and_exports_clickable_selecte
                         "location": "Berlin, DE",
                         "description": "The application data is processed securely",
                         "job_url": "https://de.indeed.com/viewjob?jk=other-1",
+                        "date_posted": "2026-10-10",
                     },
                 ]
             )
@@ -50,6 +53,7 @@ def test_europe_collection_keeps_attempt_snapshots_and_exports_clickable_selecte
                     "location": "Berlin, DE",
                     "description": "Build Python and SQL pipelines with Airflow on AWS",
                     "job_url": "https://de.indeed.com/viewjob?jk=data-1",
+                    "date_posted": "2026-10-10",
                 }
             ]
         )
@@ -61,6 +65,7 @@ def test_europe_collection_keeps_attempt_snapshots_and_exports_clickable_selecte
         days_old=3650,
         scrape_fn=fake_scrape,
         run_id="test-run",
+        as_of=date(2026, 10, 19),
     )
 
     assert [call["results_wanted"] for call in calls] == [2, 4]
@@ -114,7 +119,7 @@ def test_europe_collection_keeps_attempt_snapshots_and_exports_clickable_selecte
             "company": "Example",
             "location": "Berlin, DE",
             "country_code": "DE",
-            "published_at": None,
+            "published_at": "2026-10-10",
             "employment_type": None,
             "is_remote": None,
             "url": "https://de.indeed.com/viewjob?jk=data-1",
@@ -146,6 +151,43 @@ def test_europe_collection_keeps_attempt_snapshots_and_exports_clickable_selecte
     assert "Prison Officer" not in report
 
 
+def test_country_is_failed_when_any_required_attempt_fails(tmp_path: Path):
+    def mixed_scrape(**kwargs):
+        if kwargs["results_wanted"] == 4:
+            raise RuntimeError("blocked")
+        return pd.DataFrame(
+            [
+                {
+                    "id": "data-1",
+                    "site": "indeed",
+                    "title": "Data Engineer",
+                    "company": "Example",
+                    "location": "Berlin",
+                    "description": "Python and SQL",
+                    "job_url": "https://de.indeed.com/viewjob?jk=data-1",
+                    "date_posted": "2026-10-10",
+                }
+            ]
+        )
+
+    summary = collect_europe_data_engineers(
+        tmp_path,
+        countries=(EuropeCountry("Germany", "DE"),),
+        limits=(2, 4),
+        days_old=14,
+        scrape_fn=mixed_scrape,
+        as_of=date(2026, 10, 19),
+    )
+
+    assert summary.countries_completed == 0
+    assert summary.countries_failed == 1
+    assert summary.error_count == 1
+    with sqlite3.connect(summary.database_path) as connection:
+        assert connection.execute(
+            "SELECT status FROM ingestion_runs ORDER BY rowid DESC LIMIT 1"
+        ).fetchone()[0] == "failed"
+
+
 def test_europe_collection_excludes_title_match_above_experience_limit(tmp_path: Path):
     def fake_scrape(**_kwargs):
         return pd.DataFrame(
@@ -162,6 +204,7 @@ def test_europe_collection_excludes_title_match_above_experience_limit(tmp_path:
                         "Responsibilities\nBuild ETL pipelines and improve data quality."
                     ),
                     "job_url": "https://uk.indeed.com/viewjob?jk=within-limit",
+                    "date_posted": "2026-10-10",
                 },
                 {
                     "id": "above-limit",
@@ -171,6 +214,7 @@ def test_europe_collection_excludes_title_match_above_experience_limit(tmp_path:
                     "location": "London",
                     "description": "Requires 7+ years of professional experience with SQL.",
                     "job_url": "https://uk.indeed.com/viewjob?jk=above-limit",
+                    "date_posted": "2026-10-10",
                 },
             ]
         )
@@ -181,6 +225,7 @@ def test_europe_collection_excludes_title_match_above_experience_limit(tmp_path:
         limits=(2,),
         scrape_fn=fake_scrape,
         run_id="experience-filter",
+        as_of=date(2026, 10, 19),
     )
 
     assert summary.raw_unique_jobs == 2
@@ -279,6 +324,7 @@ def test_europe_collection_replaces_only_europe_scope_in_shared_database(tmp_pat
                 "location": "Berlin",
                 "description": "Build SQL pipelines",
                 "job_url": "https://de.indeed.com/viewjob?jk=data-1",
+                "date_posted": "2026-10-10",
             }]
         )
 
@@ -289,6 +335,7 @@ def test_europe_collection_replaces_only_europe_scope_in_shared_database(tmp_pat
         scrape_fn=fake_scrape,
         run_id="selected-only",
         database_path=database_path,
+        as_of=date(2026, 10, 19),
     )
 
     with sqlite3.connect(database_path) as connection:
@@ -351,6 +398,149 @@ def test_largest_batch_is_not_reused_across_different_freshness_scopes(tmp_path:
     assert largest["metadata"]["days_old"] == 3650
 
 
+def test_current_scope_uses_current_run_not_historical_largest_batch(tmp_path: Path):
+    def fake_scrape(**kwargs):
+        identifier = "old-a" if kwargs["results_wanted"] == 2 else "current"
+        rows = [
+            {
+                "id": identifier,
+                "site": "indeed",
+                "title": "Data Engineer",
+                "company": "Example",
+                "location": "Berlin",
+                "description": "Build SQL pipelines",
+                "job_url": f"https://de.indeed.com/viewjob?jk={identifier}",
+                "date_posted": "2026-10-10",
+            }
+        ]
+        if kwargs["results_wanted"] == 2:
+            rows.append({**rows[0], "id": "old-b", "job_url": "https://de.indeed.com/viewjob?jk=old-b"})
+        return pd.DataFrame(rows)
+
+    database = tmp_path / "jobs.db"
+    collect_europe_data_engineers(
+        tmp_path,
+        countries=(EuropeCountry("Germany", "DE"),),
+        limits=(2,),
+        days_old=14,
+        scrape_fn=fake_scrape,
+        run_id="first",
+        database_path=database,
+        as_of=date(2026, 10, 19),
+    )
+    collect_europe_data_engineers(
+        tmp_path,
+        countries=(EuropeCountry("Germany", "DE"),),
+        limits=(1,),
+        days_old=14,
+        scrape_fn=fake_scrape,
+        run_id="second",
+        database_path=database,
+        as_of=date(2026, 10, 19),
+    )
+
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT source_job_id FROM europe_jobs"
+        ).fetchall() == [("current",)]
+    largest = json.loads((tmp_path / "snapshots" / "germany" / "largest-batch.json").read_text())
+    assert len(largest["jobs"]) == 2
+
+
+def test_europe_reports_cross_country_duplicate_hits(tmp_path: Path):
+    def fake_scrape(**_kwargs):
+        return pd.DataFrame(
+            [
+                {
+                    "id": "shared",
+                    "site": "indeed",
+                    "title": "Data Engineer",
+                    "company": "Example",
+                    "location": "Europe",
+                    "description": "Requires 3 years of experience. Python and SQL.",
+                    "job_url": "https://example.indeed.com/viewjob?jk=shared",
+                    "date_posted": "2026-10-10",
+                }
+            ]
+        )
+
+    summary = collect_europe_data_engineers(
+        tmp_path,
+        countries=(
+            EuropeCountry("Germany", "DE"),
+            EuropeCountry("Austria", "AT"),
+        ),
+        limits=(1,),
+        days_old=14,
+        scrape_fn=fake_scrape,
+        as_of=date(2026, 10, 19),
+    )
+
+    assert summary.raw_unique_jobs == 1
+    assert summary.duplicate_rows == 1
+
+
+def test_europe_scope_size_anomaly_keeps_previous_publication(tmp_path: Path):
+    def fake_scrape(**kwargs):
+        return pd.DataFrame(
+            [
+                {
+                    "id": f"job-{kwargs['results_wanted']}-{index}",
+                    "site": "indeed",
+                    "title": "Data Engineer",
+                    "company": "Example",
+                    "location": "Berlin",
+                    "description": "Requires 3 years of experience. Python and SQL.",
+                    "job_url": (
+                        "https://de.indeed.com/viewjob?jk="
+                        f"job-{kwargs['results_wanted']}-{index}"
+                    ),
+                    "date_posted": "2026-10-10",
+                }
+                for index in range(kwargs["results_wanted"])
+            ]
+        )
+
+    database = tmp_path / "jobs.db"
+    collect_europe_data_engineers(
+        tmp_path,
+        countries=(EuropeCountry("Germany", "DE"),),
+        limits=(4,),
+        days_old=14,
+        scrape_fn=fake_scrape,
+        run_id="baseline",
+        database_path=database,
+        as_of=date(2026, 10, 19),
+    )
+    summary = collect_europe_data_engineers(
+        tmp_path,
+        countries=(EuropeCountry("Germany", "DE"),),
+        limits=(1,),
+        days_old=14,
+        scrape_fn=fake_scrape,
+        run_id="anomaly",
+        database_path=database,
+        as_of=date(2026, 10, 19),
+        minimum_scope_ratio=0.5,
+        minimum_baseline_size=1,
+    )
+
+    assert summary.scope_anomaly is True
+    assert summary.error_count == 1
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM europe_jobs"
+        ).fetchone()[0] == 4
+        assert connection.execute(
+            "SELECT status FROM ingestion_runs ORDER BY rowid DESC LIMIT 1"
+        ).fetchone()[0] == "partial"
+
+
+def test_europe_collection_rejects_empty_country_list(tmp_path: Path):
+    with pytest.raises(ValueError, match="countries must not be empty"):
+        collect_europe_data_engineers(tmp_path, countries=())
+
+
 def test_europe_collection_rejects_nonpositive_limits(tmp_path: Path):
     with pytest.raises(ValueError, match="limits must contain positive integers"):
         collect_europe_data_engineers(tmp_path, limits=(0,))
@@ -403,3 +593,99 @@ def test_largest_batch_is_not_reused_for_a_different_country_code(tmp_path: Path
         (tmp_path / "snapshots" / "example-country" / "largest-batch.json").read_text()
     )
     assert largest["metadata"]["country_code"] == "BB"
+
+
+def test_europe_collection_enforces_freshness_after_source_response(tmp_path: Path):
+    def fake_scrape(**_kwargs):
+        base = {
+            "site": "indeed",
+            "title": "Data Engineer",
+            "company": "Example",
+            "location": "Berlin",
+            "description": "Build SQL pipelines",
+        }
+        return pd.DataFrame(
+            [
+                {**base, "id": "fresh", "job_url": "https://de.indeed.com/viewjob?jk=fresh", "date_posted": "2026-10-06"},
+                {**base, "id": "stale", "job_url": "https://de.indeed.com/viewjob?jk=stale", "date_posted": "2026-10-05"},
+                {**base, "id": "missing", "job_url": "https://de.indeed.com/viewjob?jk=missing", "date_posted": None},
+            ]
+        )
+
+    summary = collect_europe_data_engineers(
+        tmp_path,
+        countries=(EuropeCountry("Germany", "DE"),),
+        limits=(3,),
+        days_old=14,
+        scrape_fn=fake_scrape,
+        run_id="freshness",
+        as_of=date(2026, 10, 19),
+    )
+
+    assert summary.raw_unique_jobs == 3
+    assert summary.selected_data_engineers == 1
+    assert summary.rows_fresh == 1
+    assert summary.rows_stale == 1
+    assert summary.rows_missing_date == 1
+    selected = json.loads((tmp_path / "jobs-selected.json").read_text())
+    assert [row["url"] for row in selected] == ["https://de.indeed.com/viewjob?jk=fresh"]
+
+
+def test_europe_failure_is_failed_and_keeps_last_successful_scope(tmp_path: Path):
+    database_path = tmp_path / "jobs.db"
+    with JobRepository(database_path) as repository:
+        repository.ensure_scope("europe:data-engineer", "europe", label="Europe Data Engineer")
+        run_id = repository.start_run({"mode": "seed"}, scope_key="europe:data-engineer")
+        job_id = repository.save_job(
+            run_id,
+            JobRecord(
+                dedupe_key="existing",
+                source="indeed",
+                source_job_id="existing",
+                query="Data Engineer",
+                title="Data Engineer",
+                company="Existing",
+                location="Berlin",
+                country_code="DE",
+                description="Build SQL pipelines",
+                canonical_url="https://de.indeed.com/viewjob?jk=existing",
+                published_at="2026-10-10",
+                employment_type=None,
+                is_remote=None,
+                salary_min=None,
+                salary_max=None,
+                salary_currency=None,
+                salary_period=None,
+                eligibility="unknown",
+                eligibility_reason="experience_not_stated",
+            ),
+            {"seed": True},
+        )
+        repository.replace_scope_jobs(
+            "europe:data-engineer",
+            [(job_id, "unknown", "experience_not_stated")],
+        )
+
+    def failed_scrape(**_kwargs):
+        raise RuntimeError("Indeed unavailable")
+
+    summary = collect_europe_data_engineers(
+        tmp_path,
+        countries=(EuropeCountry("Germany", "DE"),),
+        limits=(1,),
+        days_old=14,
+        scrape_fn=failed_scrape,
+        run_id="failed-run",
+        database_path=database_path,
+        as_of=date(2026, 10, 19),
+    )
+
+    assert summary.countries_completed == 0
+    assert summary.error_count == 1
+    with sqlite3.connect(database_path) as connection:
+        assert connection.execute(
+            "SELECT status FROM ingestion_runs ORDER BY started_at DESC LIMIT 1"
+        ).fetchone()[0] == "failed"
+        assert connection.execute(
+            "SELECT source_job_id FROM europe_jobs"
+        ).fetchall() == [("existing",)]

@@ -113,6 +113,25 @@ def bar(panel_id: int, title: str, query: str, x: int, y: int, w: int, h: int = 
     )
 
 
+def timeseries(panel_id: int, title: str, query: str, x: int, y: int, w: int, h: int) -> dict[str, Any]:
+    result = panel(
+        panel_id,
+        title,
+        "timeseries",
+        query,
+        x,
+        y,
+        w,
+        h,
+        options={
+            "legend": {"displayMode": "table", "placement": "right", "showLegend": True},
+            "tooltip": {"mode": "multi", "sort": "desc"},
+        },
+    )
+    result["targets"][0]["queryType"] = "time series"
+    return result
+
+
 def table(panel_id: int, title: str, query: str, x: int, y: int, w: int, h: int, overrides: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     return panel(
         panel_id,
@@ -225,8 +244,33 @@ def build() -> dict[str, dict[str, Any]]:
             stat(4, "Alternatives", f"SELECT COUNT(*) AS Alternatives FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE {COUNTRY_FILTER} AND jt.requirement_type = 'alternative'", 18, 0),
             bar(5, "Top technologies", f"SELECT jt.technology AS Technology, COUNT(DISTINCT jt.job_id) AS Vacancies FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE {COUNTRY_FILTER} AND {REQUIREMENT_FILTER} GROUP BY jt.technology ORDER BY Vacancies DESC LIMIT 20", 0, 4, 12, 11),
             bar(6, "Demand by category", f"SELECT jt.category AS Category, COUNT(DISTINCT jt.job_id) AS Vacancies FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE {COUNTRY_FILTER} AND {REQUIREMENT_FILTER} GROUP BY jt.category ORDER BY Vacancies DESC", 12, 4, 12, 11),
-            table(7, "Requirement mix", f"SELECT jt.technology AS Technology, COUNT(DISTINCT CASE WHEN jt.requirement_type = 'required' THEN jt.job_id END) AS Required, COUNT(DISTINCT CASE WHEN jt.requirement_type = 'preferred' THEN jt.job_id END) AS Preferred, COUNT(DISTINCT CASE WHEN jt.requirement_type = 'alternative' THEN jt.job_id END) AS Alternative, COUNT(DISTINCT CASE WHEN jt.requirement_type = 'mentioned' THEN jt.job_id END) AS Mentioned FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE {COUNTRY_FILTER} GROUP BY jt.technology ORDER BY Required DESC, Preferred DESC LIMIT 30", 0, 15, 14, 12),
-            table(8, "Evidence samples", f"SELECT jt.technology AS Technology, jt.requirement_type AS Type, e.title AS Vacancy, e.company AS Company, jt.section AS Section, jt.evidence_text AS Evidence, e.canonical_url AS URL FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE {COUNTRY_FILTER} AND {REQUIREMENT_FILTER} ORDER BY CASE jt.requirement_type WHEN 'required' THEN 1 WHEN 'preferred' THEN 2 WHEN 'alternative' THEN 3 ELSE 4 END, e.published_at DESC LIMIT 100", 14, 15, 10, 12, [url_override]),
+            timeseries(9, "Required technology trend", """WITH latest AS (
+                SELECT MAX(captured_at) AS captured_at
+                FROM technology_snapshots
+                WHERE scope_key='europe:data-engineer'
+                  AND country_code=${country:sqlstring}
+                  AND requirement_type='required'
+            ), top AS (
+                SELECT technology
+                FROM technology_snapshots
+                WHERE scope_key='europe:data-engineer'
+                  AND country_code=${country:sqlstring}
+                  AND requirement_type='required'
+                  AND captured_at=(SELECT captured_at FROM latest)
+                ORDER BY vacancy_count DESC, technology
+                LIMIT 10
+            )
+            SELECT datetime(ts.captured_at) AS time,
+                   ts.technology AS metric,
+                   ts.vacancy_count AS value
+            FROM technology_snapshots ts
+            JOIN top ON top.technology=ts.technology
+            WHERE ts.scope_key='europe:data-engineer'
+              AND ts.country_code=${country:sqlstring}
+              AND ts.requirement_type='required'
+            ORDER BY ts.captured_at, ts.technology""", 0, 15, 24, 10),
+            table(7, "Requirement mix", f"SELECT jt.technology AS Technology, COUNT(DISTINCT CASE WHEN jt.requirement_type = 'required' THEN jt.job_id END) AS Required, COUNT(DISTINCT CASE WHEN jt.requirement_type = 'preferred' THEN jt.job_id END) AS Preferred, COUNT(DISTINCT CASE WHEN jt.requirement_type = 'alternative' THEN jt.job_id END) AS Alternative, COUNT(DISTINCT CASE WHEN jt.requirement_type = 'mentioned' THEN jt.job_id END) AS Mentioned FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE {COUNTRY_FILTER} GROUP BY jt.technology ORDER BY Required DESC, Preferred DESC LIMIT 30", 0, 25, 14, 12),
+            table(8, "Evidence samples", f"SELECT jt.technology AS Technology, jt.requirement_type AS Type, e.title AS Vacancy, e.company AS Company, jt.section AS Section, jt.evidence_text AS Evidence, e.canonical_url AS URL FROM job_technologies jt JOIN europe_jobs e ON e.id = jt.job_id WHERE {COUNTRY_FILTER} AND {REQUIREMENT_FILTER} ORDER BY CASE jt.requirement_type WHEN 'required' THEN 1 WHEN 'preferred' THEN 2 WHEN 'alternative' THEN 3 ELSE 4 END, e.published_at DESC LIMIT 100", 14, 25, 10, 12, [url_override]),
         ],
         [
             country_variable(),

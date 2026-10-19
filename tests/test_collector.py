@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pandas as pd
 
 from indeed_job_parser.collector import collect_indeed
@@ -47,3 +49,68 @@ def test_preserves_successful_query_when_another_query_fails():
 
     assert len(rows) == 1
     assert errors == ["QA Engineer: RuntimeError: rate limited"]
+
+
+def test_retries_transient_query_failure_once():
+    attempts = 0
+
+    def flaky_scrape(**kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("temporary")
+        return pd.DataFrame([{"id": "ok", "title": kwargs["search_term"]}])
+
+    single_query = replace(config(), queries=("QA Engineer",))
+    rows, errors = collect_indeed(
+        single_query,
+        scrape_fn=flaky_scrape,
+        max_attempts=2,
+        retry_delay=0,
+    )
+
+    assert attempts == 2
+    assert len(rows) == 1
+    assert errors == []
+
+
+def test_does_not_retry_access_control_failure():
+    attempts = 0
+
+    def blocked_scrape(**_kwargs):
+        nonlocal attempts
+        attempts += 1
+        raise RuntimeError("403 Forbidden: CAPTCHA required")
+
+    rows, errors = collect_indeed(
+        replace(config(), queries=("QA Engineer",)),
+        scrape_fn=blocked_scrape,
+        max_attempts=3,
+        retry_delay=0,
+    )
+
+    assert attempts == 1
+    assert rows == []
+    assert errors == ["QA Engineer: RuntimeError: 403 Forbidden: CAPTCHA required"]
+
+
+def test_deadline_stops_collection_before_network_call():
+    calls = 0
+
+    def fake_scrape(**_kwargs):
+        nonlocal calls
+        calls += 1
+        return pd.DataFrame()
+
+    rows, errors = collect_indeed(
+        config(),
+        scrape_fn=fake_scrape,
+        deadline_seconds=0,
+    )
+
+    assert calls == 0
+    assert rows == []
+    assert errors == [
+        "QA Engineer: collection deadline exceeded",
+        "Data Quality Analyst: collection deadline exceeded",
+    ]

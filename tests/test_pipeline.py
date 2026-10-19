@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -40,7 +41,7 @@ def test_pipeline_persists_all_decisions_and_exports_selected_rows(tmp_path: Pat
     write_config(config_path)
 
     def fake_scrape(**kwargs):
-        return pd.DataFrame([
+        frame = pd.DataFrame([
             {
                 "id": "eligible",
                 "site": "indeed",
@@ -90,8 +91,12 @@ def test_pipeline_persists_all_decisions_and_exports_selected_rows(tmp_path: Pat
                 "interval": "yearly",
             },
         ])
+        frame["date_posted"] = "2026-10-10"
+        return frame
 
-    summary = run_pipeline(config_path, scrape_fn=fake_scrape)
+    summary = run_pipeline(
+        config_path, scrape_fn=fake_scrape, as_of=date(2026, 10, 19)
+    )
 
     assert summary.rows_received == 4
     assert summary.rows_eligible == 1
@@ -152,7 +157,7 @@ output_dir = "output"
     )
 
     def fake_scrape(**kwargs):
-        return pd.DataFrame([
+        frame = pd.DataFrame([
             {
                 "id": "data-1",
                 "site": "indeed",
@@ -172,8 +177,12 @@ output_dir = "output"
                 "description": "Requires 4 years of experience.",
             },
         ])
+        frame["date_posted"] = "2026-10-10"
+        return frame
 
-    summary = run_pipeline(config_path, scrape_fn=fake_scrape)
+    summary = run_pipeline(
+        config_path, scrape_fn=fake_scrape, as_of=date(2026, 10, 19)
+    )
 
     assert summary.rows_eligible == 1
     assert summary.rows_rejected == 1
@@ -190,7 +199,7 @@ def test_pipeline_applies_cli_overrides_end_to_end(tmp_path: Path):
         assert kwargs["country_indeed"] == "Germany"
         assert kwargs["location"] == "Berlin"
         assert kwargs["results_wanted"] == 2
-        return pd.DataFrame([
+        frame = pd.DataFrame([
             {
                 "id": "data-cli",
                 "site": "indeed",
@@ -201,6 +210,8 @@ def test_pipeline_applies_cli_overrides_end_to_end(tmp_path: Path):
                 "description": "Requires 3 years of experience.",
             }
         ])
+        frame["date_posted"] = "2026-10-10"
+        return frame
 
     summary = run_pipeline(
         config_path,
@@ -212,6 +223,94 @@ def test_pipeline_applies_cli_overrides_end_to_end(tmp_path: Path):
             location="Berlin",
             results_per_query=2,
         ),
+        as_of=date(2026, 10, 19),
     )
 
     assert summary.rows_eligible == 1
+
+
+def test_pipeline_enforces_freshness_locally_and_reports_date_quality(tmp_path: Path):
+    config_path = tmp_path / "config.toml"
+    write_config(config_path)
+
+    def fake_scrape(**kwargs):
+        base = {
+            "site": "indeed",
+            "title": "QA Engineer",
+            "company": "A",
+            "location": "Prague",
+            "description": "API testing",
+        }
+        return pd.DataFrame(
+            [
+                {**base, "id": "fresh", "job_url": "https://cz.indeed.com/viewjob?jk=fresh", "date_posted": "2026-10-06"},
+                {**base, "id": "stale", "job_url": "https://cz.indeed.com/viewjob?jk=stale", "date_posted": "2026-10-05"},
+                {**base, "id": "future", "job_url": "https://cz.indeed.com/viewjob?jk=future", "date_posted": "2026-10-20"},
+                {**base, "id": "invalid", "job_url": "https://cz.indeed.com/viewjob?jk=invalid", "date_posted": "invalid"},
+                {**base, "id": "missing", "job_url": "https://cz.indeed.com/viewjob?jk=missing", "date_posted": None},
+            ]
+        )
+
+    summary = run_pipeline(config_path, scrape_fn=fake_scrape, as_of=date(2026, 10, 19))
+
+    assert summary.rows_received == 5
+    assert summary.rows_fresh == 1
+    assert summary.rows_stale == 1
+    assert summary.rows_future == 1
+    assert summary.rows_invalid_date == 1
+    assert summary.rows_missing_date == 1
+    database = sqlite3.connect(tmp_path / "data/jobs.db")
+    assert database.execute("SELECT count(*) FROM scope_jobs").fetchone()[0] == 1
+    database.close()
+    selected = json.loads((tmp_path / "output/jobs-selected.json").read_text())
+    assert [row["source_job_id"] for row in selected] == ["fresh"]
+
+
+def test_partial_collection_keeps_last_successful_scope(tmp_path: Path):
+    config_path = tmp_path / "config.toml"
+    write_config(config_path)
+    config_path.write_text(config_path.read_text().replace(
+        'queries = ["QA Engineer"]',
+        'queries = ["QA Engineer", "QA Automation"]',
+    ))
+
+    def row(identifier: str):
+        return pd.DataFrame([
+            {
+                "id": identifier,
+                "site": "indeed",
+                "title": "QA Engineer",
+                "company": "A",
+                "location": "Prague",
+                "job_url": f"https://cz.indeed.com/viewjob?jk={identifier}",
+                "description": "API testing",
+                "date_posted": "2026-10-10",
+            }
+        ])
+
+    run_pipeline(
+        config_path,
+        scrape_fn=lambda **kwargs: row("old"),
+        as_of=date(2026, 10, 19),
+    )
+
+    def partial_scrape(**kwargs):
+        if kwargs["search_term"] == "QA Automation":
+            raise RuntimeError("temporary source failure")
+        return row("new")
+
+    summary = run_pipeline(
+        config_path,
+        scrape_fn=partial_scrape,
+        as_of=date(2026, 10, 19),
+    )
+
+    assert summary.error_count == 1
+    database = sqlite3.connect(tmp_path / "data/jobs.db")
+    assert database.execute(
+        "SELECT status FROM ingestion_runs ORDER BY started_at DESC LIMIT 1"
+    ).fetchone()[0] == "partial"
+    assert database.execute(
+        "SELECT source_job_id FROM country_jobs ORDER BY source_job_id"
+    ).fetchall() == [("old",)]
+    database.close()

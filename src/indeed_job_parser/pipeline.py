@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
+from .annotations import replace_job_annotations
 from .collector import collect_indeed
 from .config import AppConfig, ConfigOverrides, load_config
 from .eligibility import evaluate_job
 from .exporter import export_jobs
+from .freshness import assess_freshness
 from .models import JobRecord
 from .normalizer import normalize_record
+from .operations import collection_lock
 from .repository import JobRepository
-from .stack import extract_concept_mentions, extract_technology_mentions
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +27,11 @@ class RunSummary:
     error_count: int
     database_path: str
     output_dir: str
+    rows_fresh: int = 0
+    rows_stale: int = 0
+    rows_future: int = 0
+    rows_invalid_date: int = 0
+    rows_missing_date: int = 0
 
 
 def _apply_decision(job: JobRecord, config: AppConfig) -> JobRecord:
@@ -63,12 +71,35 @@ def run_pipeline(
     scrape_fn: Callable[..., Any] | None = None,
     *,
     overrides: ConfigOverrides | None = None,
+    as_of: date | None = None,
+    deadline_seconds: float = 600,
 ) -> RunSummary:
     config = load_config(config_path, overrides=overrides)
-    raw_rows, errors = collect_indeed(config.search, scrape_fn=scrape_fn)
+    with collection_lock(config.storage.database_path):
+        return _run_pipeline(
+            config,
+            scrape_fn=scrape_fn,
+            as_of=as_of,
+            deadline_seconds=deadline_seconds,
+        )
+
+
+def _run_pipeline(
+    config: AppConfig,
+    *,
+    scrape_fn: Callable[..., Any] | None = None,
+    as_of: date | None = None,
+    deadline_seconds: float = 600,
+) -> RunSummary:
+    raw_rows, errors = collect_indeed(
+        config.search,
+        scrape_fn=scrape_fn,
+        deadline_seconds=deadline_seconds,
+    )
     processed: list[JobRecord] = []
     scope_key = f"country:{config.search.country_code.upper()}"
     with JobRepository(config.storage.database_path) as repository:
+        repository.abandon_stale_runs(older_than=timedelta(hours=24))
         repository.ensure_scope(
             scope_key,
             "country",
@@ -76,32 +107,58 @@ def run_pipeline(
             label=config.search.country,
         )
         run_id = repository.start_run(asdict(config), scope_key=scope_key)
+        freshness_counts = {status: 0 for status in ("fresh", "stale", "future", "invalid", "missing")}
         try:
             scope_memberships: list[tuple[int, str, str]] = []
             for raw in raw_rows:
                 job = normalize_record(raw, raw.get("_query", ""), config.search.country_code)
-                job = _apply_decision(job, config)
+                freshness = assess_freshness(
+                    job.published_at,
+                    days_old=config.search.days_old,
+                    today=as_of,
+                )
+                freshness_counts[freshness] += 1
+                if freshness == "fresh":
+                    job = _apply_decision(job, config)
+                else:
+                    job = replace(
+                        job,
+                        eligibility="rejected",
+                        eligibility_reason=f"published_at_{freshness}",
+                    )
                 processed.append(job)
                 job_id = repository.save_job(run_id, job, raw, commit=False)
-                source_text = f"{job.title}\n{job.description}"
-                repository.replace_job_technology_mentions(
+                replace_job_annotations(
+                    repository,
                     job_id,
-                    extract_technology_mentions(source_text),
+                    job.title,
+                    job.description,
                     commit=False,
                 )
-                repository.replace_job_concepts(
-                    job_id,
-                    extract_concept_mentions(source_text),
+                if freshness == "fresh":
+                    scope_memberships.append(
+                        (job_id, job.eligibility, job.eligibility_reason)
+                    )
+            if not errors:
+                repository.replace_scope_jobs(
+                    scope_key,
+                    scope_memberships,
+                    run_id=run_id,
                     commit=False,
                 )
-                scope_memberships.append(
-                    (job_id, job.eligibility, job.eligibility_reason)
-                )
-            repository.replace_scope_jobs(scope_key, scope_memberships, commit=False)
             counts = {
                 status: sum(job.eligibility == status for job in processed)
                 for status in ("eligible", "unknown", "rejected")
             }
+            repository.record_run_quality(
+                run_id,
+                rows_fresh=freshness_counts["fresh"],
+                rows_stale=freshness_counts["stale"],
+                rows_future=freshness_counts["future"],
+                rows_invalid_date=freshness_counts["invalid"],
+                rows_missing_date=freshness_counts["missing"],
+                commit=False,
+            )
             repository.finish_run(
                 run_id,
                 status="succeeded" if not errors else "partial",
@@ -142,4 +199,9 @@ def run_pipeline(
         error_count=len(errors),
         database_path=str(config.storage.database_path),
         output_dir=str(config.storage.output_dir),
+        rows_fresh=freshness_counts["fresh"],
+        rows_stale=freshness_counts["stale"],
+        rows_future=freshness_counts["future"],
+        rows_invalid_date=freshness_counts["invalid"],
+        rows_missing_date=freshness_counts["missing"],
     )

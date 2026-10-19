@@ -448,6 +448,62 @@
       ]
     },
     {
+      "id": 9,
+      "title": "Required technology trend",
+      "type": "timeseries",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "jobs-sqlite"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 24,
+        "h": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "jobs-sqlite"
+          },
+          "queryText": "WITH latest AS (\n                SELECT MAX(captured_at) AS captured_at\n                FROM technology_snapshots\n                WHERE scope_key='europe:data-engineer'\n                  AND country_code=${country:sqlstring}\n                  AND requirement_type='required'\n            ), top AS (\n                SELECT technology\n                FROM technology_snapshots\n                WHERE scope_key='europe:data-engineer'\n                  AND country_code=${country:sqlstring}\n                  AND requirement_type='required'\n                  AND captured_at=(SELECT captured_at FROM latest)\n                ORDER BY vacancy_count DESC, technology\n                LIMIT 10\n            )\n            SELECT datetime(ts.captured_at) AS time,\n                   ts.technology AS metric,\n                   ts.vacancy_count AS value\n            FROM technology_snapshots ts\n            JOIN top ON top.technology=ts.technology\n            WHERE ts.scope_key='europe:data-engineer'\n              AND ts.country_code=${country:sqlstring}\n              AND ts.requirement_type='required'\n            ORDER BY ts.captured_at, ts.technology",
+          "rawQueryText": "WITH latest AS (\n                SELECT MAX(captured_at) AS captured_at\n                FROM technology_snapshots\n                WHERE scope_key='europe:data-engineer'\n                  AND country_code=${country:sqlstring}\n                  AND requirement_type='required'\n            ), top AS (\n                SELECT technology\n                FROM technology_snapshots\n                WHERE scope_key='europe:data-engineer'\n                  AND country_code=${country:sqlstring}\n                  AND requirement_type='required'\n                  AND captured_at=(SELECT captured_at FROM latest)\n                ORDER BY vacancy_count DESC, technology\n                LIMIT 10\n            )\n            SELECT datetime(ts.captured_at) AS time,\n                   ts.technology AS metric,\n                   ts.vacancy_count AS value\n            FROM technology_snapshots ts\n            JOIN top ON top.technology=ts.technology\n            WHERE ts.scope_key='europe:data-engineer'\n              AND ts.country_code=${country:sqlstring}\n              AND ts.requirement_type='required'\n            ORDER BY ts.captured_at, ts.technology",
+          "queryType": "time series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
       "id": 7,
       "title": "Requirement mix",
       "type": "table",
@@ -457,7 +513,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 15,
+        "y": 25,
         "w": 14,
         "h": 12
       },
@@ -507,7 +563,7 @@
       },
       "gridPos": {
         "x": 14,
-        "y": 15,
+        "y": 25,
         "w": 10,
         "h": 12
       },

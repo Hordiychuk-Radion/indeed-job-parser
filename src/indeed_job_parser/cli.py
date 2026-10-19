@@ -12,6 +12,7 @@ from .europe import EuropeSummary, collect_europe_data_engineers
 from .pipeline import RunSummary, run_pipeline
 from .profiles import ProfileDraft, discover_profiles, resolve_profile, write_profile
 from .repository import inspect_database
+from .weekly import run_weekly
 
 
 DEFAULT_CONFIG = Path("config/example.toml")
@@ -89,6 +90,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_DATABASE,
         help="Shared SQLite path; defaults to data/jobs.db",
     )
+    europe.add_argument("--lock-held", action="store_true", help=argparse.SUPPRESS)
 
     inspect = subparsers.add_parser("inspect-db", help="Show SQLite contents as JSON")
     inspect.add_argument(
@@ -103,6 +105,20 @@ def build_parser() -> argparse.ArgumentParser:
         default=10,
         help="Number of recent jobs to include",
     )
+    weekly = subparsers.add_parser(
+        "weekly",
+        help="Run a bounded Europe refresh, publish quality metrics, and refresh Grafana",
+    )
+    weekly.add_argument("--project-root", type=Path, default=Path.cwd())
+    weekly.add_argument("--database", type=Path, default=DEFAULT_DATABASE)
+    weekly.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("output/europe-data-engineer"),
+    )
+    weekly.add_argument("--days-old", type=int, default=14)
+    weekly.add_argument("--limit", type=int, default=100)
+    weekly.add_argument("--timeout-minutes", type=float, default=45)
     return parser
 
 
@@ -268,6 +284,7 @@ def main(
     runner: Callable[..., RunSummary] = run_pipeline,
     europe_runner: Callable[..., EuropeSummary] = collect_europe_data_engineers,
     database_inspector: Callable[..., dict[str, object]] = inspect_database,
+    weekly_runner: Callable[..., dict[str, object]] = run_weekly,
     input_fn: Callable[[str], str] = input,
     profiles_dir: Path = DEFAULT_PROFILES_DIR,
 ) -> int:
@@ -292,14 +309,27 @@ def main(
             )
         )
         return 0
+    if args.command == "weekly":
+        payload = weekly_runner(
+            args.project_root,
+            database_path=args.database,
+            output_dir=args.output_dir,
+            days_old=args.days_old,
+            limit=args.limit,
+            timeout_seconds=args.timeout_minutes * 60,
+        )
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
     if args.command == "europe-data-engineer":
         limits = tuple(args.limits) if args.limits else (100, 500, 1000)
+        lock_options = {"_lock_held": True} if args.lock_held else {}
         return _print_europe_summary(
             europe_runner(
                 args.output_dir,
                 limits=limits,
                 days_old=args.days_old,
                 database_path=args.database,
+                **lock_options,
             )
         )
     if args.command == "run":

@@ -316,3 +316,34 @@ def test_cli_inspects_database_as_json(tmp_path: Path, capsys):
     assert exit_code == 0
     assert received == {"path": database, "limit": 7}
     assert json.loads(capsys.readouterr().out)["counts"]["jobs"] == 3
+
+
+def test_cli_runs_bounded_weekly_refresh(tmp_path: Path, capsys):
+    received = {}
+
+    def fake_weekly_runner(project_root, **kwargs):
+        received["project_root"] = project_root
+        received.update(kwargs)
+        return {"status": "ok", "quality": {"rows_fresh": 10}}
+
+    exit_code = main(
+        [
+            "weekly",
+            "--project-root",
+            str(tmp_path),
+            "--days-old",
+            "14",
+            "--limit",
+            "100",
+            "--timeout-minutes",
+            "30",
+        ],
+        weekly_runner=fake_weekly_runner,
+    )
+
+    assert exit_code == 0
+    assert received["project_root"] == tmp_path
+    assert received["days_old"] == 14
+    assert received["limit"] == 100
+    assert received["timeout_seconds"] == 1800
+    assert json.loads(capsys.readouterr().out)["status"] == "ok"

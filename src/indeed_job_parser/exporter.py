@@ -20,7 +20,7 @@ def export_jobs(output_dir: str | Path, all_jobs: Iterable[JobRecord], selected:
     (directory / "jobs-selected.json").write_text(
         json.dumps(selected_rows, ensure_ascii=False, indent=2), encoding="utf-8"
     )
-    fields = list(asdict(all_jobs[0]).keys()) if isinstance(all_jobs, list) and all_jobs else []
+    fields = list((all_rows or selected_rows)[0]) if all_rows or selected_rows else []
     for filename, rows in (("jobs-all.csv", all_rows), ("jobs-selected.csv", selected_rows)):
         with (directory / filename).open("w", encoding="utf-8", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=fields)

@@ -70,6 +70,15 @@ def _test_database() -> sqlite3.Connection:
             section TEXT,
             evidence_text TEXT
         );
+        CREATE TABLE technology_snapshots (
+            run_id TEXT,
+            scope_key TEXT,
+            captured_at TEXT,
+            country_code TEXT,
+            technology TEXT,
+            requirement_type TEXT,
+            vacancy_count INTEGER
+        );
         INSERT INTO europe_jobs VALUES (
             1, 'Data Engineer', 'Example', 'CZ', 'Prague', 1,
             'eligible', 3, '2026-10-12', 'fulltime', 'https://example.com/job/1'
@@ -237,3 +246,17 @@ def test_overview_prioritizes_tool_demand_instead_of_general_market_charts():
     )
     assert "COUNT(DISTINCT jt.job_id)" in queries
     assert "job_concepts" in queries
+
+
+def test_technology_dashboard_exposes_historical_demand_trend():
+    dashboard = json.loads(
+        (DASHBOARD_DIR / "technology-demand.json").read_text(encoding="utf-8")
+    )
+    trend = next(
+        panel for panel in _panels(dashboard)
+        if panel["title"] == "Required technology trend"
+    )
+    query = trend["targets"][0]["queryText"]
+
+    assert "technology_snapshots" in query
+    assert "${country:sqlstring}" in query

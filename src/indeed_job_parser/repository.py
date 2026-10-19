@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -96,6 +96,47 @@ CREATE TABLE IF NOT EXISTS scope_jobs (
     PRIMARY KEY (scope_key, job_id)
 );
 
+CREATE TABLE IF NOT EXISTS scope_job_lifecycle (
+    scope_key TEXT NOT NULL REFERENCES search_scopes(scope_key) ON DELETE CASCADE,
+    job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('active', 'closed')),
+    closed_at TEXT,
+    PRIMARY KEY (scope_key, job_id)
+);
+
+CREATE TABLE IF NOT EXISTS scope_snapshots (
+    run_id TEXT NOT NULL REFERENCES ingestion_runs(id) ON DELETE CASCADE,
+    scope_key TEXT NOT NULL REFERENCES search_scopes(scope_key) ON DELETE CASCADE,
+    captured_at TEXT NOT NULL,
+    job_count INTEGER NOT NULL,
+    eligible_count INTEGER NOT NULL,
+    unknown_count INTEGER NOT NULL,
+    remote_count INTEGER NOT NULL,
+    PRIMARY KEY (run_id, scope_key)
+);
+
+CREATE TABLE IF NOT EXISTS technology_snapshots (
+    run_id TEXT NOT NULL REFERENCES ingestion_runs(id) ON DELETE CASCADE,
+    scope_key TEXT NOT NULL REFERENCES search_scopes(scope_key) ON DELETE CASCADE,
+    captured_at TEXT NOT NULL,
+    country_code TEXT NOT NULL,
+    technology TEXT NOT NULL,
+    requirement_type TEXT NOT NULL,
+    vacancy_count INTEGER NOT NULL,
+    PRIMARY KEY (run_id, scope_key, country_code, technology, requirement_type)
+);
+
+CREATE TABLE IF NOT EXISTS run_quality_metrics (
+    run_id TEXT PRIMARY KEY REFERENCES ingestion_runs(id) ON DELETE CASCADE,
+    rows_fresh INTEGER NOT NULL,
+    rows_stale INTEGER NOT NULL,
+    rows_future INTEGER NOT NULL,
+    rows_invalid_date INTEGER NOT NULL,
+    rows_missing_date INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS jobs_status_idx ON jobs(status);
 CREATE INDEX IF NOT EXISTS jobs_country_idx ON jobs(country_code);
 CREATE INDEX IF NOT EXISTS jobs_published_idx ON jobs(published_at);
@@ -104,6 +145,10 @@ CREATE INDEX IF NOT EXISTS observations_run_idx ON job_observations(run_id);
 CREATE INDEX IF NOT EXISTS technologies_name_idx ON job_technologies(technology);
 CREATE INDEX IF NOT EXISTS concepts_name_idx ON job_concepts(concept);
 CREATE INDEX IF NOT EXISTS scope_jobs_job_idx ON scope_jobs(job_id);
+CREATE INDEX IF NOT EXISTS lifecycle_status_idx ON scope_job_lifecycle(scope_key, status);
+CREATE INDEX IF NOT EXISTS scope_snapshots_time_idx ON scope_snapshots(scope_key, captured_at);
+CREATE INDEX IF NOT EXISTS technology_snapshots_time_idx
+    ON technology_snapshots(scope_key, technology, captured_at);
 
 CREATE VIEW IF NOT EXISTS europe_jobs AS
 SELECT
@@ -222,18 +267,57 @@ class JobRepository:
         self.connection.commit()
         return run_id
 
+    def abandon_stale_runs(
+        self,
+        *,
+        older_than: timedelta,
+        now: datetime | None = None,
+    ) -> int:
+        current = now or datetime.now(timezone.utc)
+        cursor = self.connection.execute(
+            """
+            UPDATE ingestion_runs
+            SET status='abandoned', finished_at=?, error_count=error_count + 1,
+                error_message=COALESCE(error_message || '\n', '') || 'Run exceeded its lease'
+            WHERE status='running' AND started_at < ?
+            """,
+            (current.isoformat(), (current - older_than).isoformat()),
+        )
+        self.connection.commit()
+        return cursor.rowcount
+
     def replace_scope_jobs(
         self,
         scope_key: str,
         jobs: list[tuple[int, str, str]],
         *,
+        run_id: str | None = None,
+        observed_at: str | None = None,
         commit: bool = True,
     ) -> None:
-        self.connection.execute("DELETE FROM scope_jobs WHERE scope_key=?", (scope_key,))
+        timestamp = observed_at or _now()
         unique_jobs = {
             job_id: (eligibility, eligibility_reason)
             for job_id, eligibility, eligibility_reason in jobs
         }
+        self.connection.execute(
+            "UPDATE scope_job_lifecycle SET status='closed', closed_at=? "
+            "WHERE scope_key=? AND status='active'",
+            (timestamp, scope_key),
+        )
+        self.connection.executemany(
+            """
+            INSERT INTO scope_job_lifecycle (
+                scope_key, job_id, first_seen_at, last_seen_at, status, closed_at
+            ) VALUES (?, ?, ?, ?, 'active', NULL)
+            ON CONFLICT(scope_key, job_id) DO UPDATE SET
+                last_seen_at=excluded.last_seen_at,
+                status='active',
+                closed_at=NULL
+            """,
+            [(scope_key, job_id, timestamp, timestamp) for job_id in unique_jobs],
+        )
+        self.connection.execute("DELETE FROM scope_jobs WHERE scope_key=?", (scope_key,))
         self.connection.executemany(
             """
             INSERT INTO scope_jobs (scope_key, job_id, eligibility, eligibility_reason)
@@ -244,6 +328,60 @@ class JobRepository:
                 for job_id, (eligibility, eligibility_reason) in unique_jobs.items()
             ],
         )
+        self.connection.execute(
+            """
+            UPDATE jobs
+            SET status=CASE
+                WHEN EXISTS (SELECT 1 FROM scope_jobs sj WHERE sj.job_id=jobs.id)
+                THEN 'active' ELSE 'inactive' END
+            """
+        )
+        if run_id is not None:
+            self.connection.execute(
+                """
+                INSERT OR REPLACE INTO scope_snapshots (
+                    run_id, scope_key, captured_at, job_count,
+                    eligible_count, unknown_count, remote_count
+                )
+                SELECT ?, ?, ?, count(*),
+                    coalesce(sum(CASE WHEN sj.eligibility='eligible' THEN 1 ELSE 0 END), 0),
+                    coalesce(sum(CASE WHEN sj.eligibility='unknown' THEN 1 ELSE 0 END), 0),
+                    coalesce(sum(CASE WHEN j.is_remote=1 THEN 1 ELSE 0 END), 0)
+                FROM scope_jobs sj JOIN jobs j ON j.id=sj.job_id
+                WHERE sj.scope_key=?
+                """,
+                (run_id, scope_key, timestamp, scope_key),
+            )
+            self.connection.execute(
+                "DELETE FROM technology_snapshots WHERE run_id=? AND scope_key=?",
+                (run_id, scope_key),
+            )
+            self.connection.execute(
+                """
+                INSERT INTO technology_snapshots (
+                    run_id, scope_key, captured_at, country_code, technology,
+                    requirement_type, vacancy_count
+                )
+                SELECT ?, ?, ?, '__all', jt.technology, jt.requirement_type,
+                    count(DISTINCT jt.job_id)
+                FROM job_technologies jt
+                JOIN scope_jobs sj ON sj.job_id=jt.job_id
+                WHERE sj.scope_key=?
+                GROUP BY jt.technology, jt.requirement_type
+                UNION ALL
+                SELECT ?, ?, ?, j.country_code, jt.technology, jt.requirement_type,
+                    count(DISTINCT jt.job_id)
+                FROM job_technologies jt
+                JOIN scope_jobs sj ON sj.job_id=jt.job_id
+                JOIN jobs j ON j.id=jt.job_id
+                WHERE sj.scope_key=?
+                GROUP BY j.country_code, jt.technology, jt.requirement_type
+                """,
+                (
+                    run_id, scope_key, timestamp, scope_key,
+                    run_id, scope_key, timestamp, scope_key,
+                ),
+            )
         if commit:
             self.connection.commit()
 
@@ -411,6 +549,36 @@ class JobRepository:
             ),
         )
         self.connection.commit()
+
+    def record_run_quality(
+        self,
+        run_id: str,
+        *,
+        rows_fresh: int,
+        rows_stale: int,
+        rows_future: int,
+        rows_invalid_date: int,
+        rows_missing_date: int,
+        commit: bool = True,
+    ) -> None:
+        self.connection.execute(
+            """
+            INSERT OR REPLACE INTO run_quality_metrics (
+                run_id, rows_fresh, rows_stale, rows_future,
+                rows_invalid_date, rows_missing_date
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                rows_fresh,
+                rows_stale,
+                rows_future,
+                rows_invalid_date,
+                rows_missing_date,
+            ),
+        )
+        if commit:
+            self.connection.commit()
 
 
 def inspect_database(database_path: str | Path, *, limit: int = 10) -> dict[str, Any]:

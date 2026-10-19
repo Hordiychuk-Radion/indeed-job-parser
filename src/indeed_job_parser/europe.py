@@ -2,23 +2,25 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import unicodedata
 from collections import Counter
 from dataclasses import asdict, dataclass, replace
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+from .annotations import replace_job_annotations
 from .collector import collect_indeed
 from .config import SearchConfig
 from .eligibility import extract_required_years
+from .freshness import assess_freshness
 from .models import JobRecord
 from .normalizer import normalize_record
+from .operations import collection_lock
 from .repository import JobRepository
 from .stack import (
-    extract_concept_mentions,
     extract_stack,
-    extract_technology_mentions,
     flatten_stack,
 )
 
@@ -38,6 +40,16 @@ class EuropeSummary:
     output_dir: str
     database_path: str = ""
     database_run_id: str = ""
+    rows_fresh: int = 0
+    rows_stale: int = 0
+    rows_future: int = 0
+    rows_invalid_date: int = 0
+    rows_missing_date: int = 0
+    countries_attempted: int = 0
+    countries_failed: int = 0
+    scope_anomaly: bool = False
+    previous_scope_size: int = 0
+    duplicate_rows: int = 0
 
 
 EUROPE_COUNTRIES = (
@@ -142,6 +154,59 @@ def collect_europe_data_engineers(
     scrape_fn: Callable[..., Any] | None = None,
     run_id: str | None = None,
     database_path: str | Path | None = None,
+    as_of: date | None = None,
+    deadline_seconds: float = 2700,
+    minimum_scope_ratio: float = 0.5,
+    minimum_baseline_size: int = 20,
+    _lock_held: bool = False,
+) -> EuropeSummary:
+    resolved_database_path = Path(database_path) if database_path else Path(output_dir) / "jobs.db"
+    if _lock_held:
+        return _collect_europe_data_engineers(
+            output_dir,
+            countries=countries,
+            limits=limits,
+            days_old=days_old,
+            distance_km=distance_km,
+            scrape_fn=scrape_fn,
+            run_id=run_id,
+            database_path=resolved_database_path,
+            as_of=as_of,
+            deadline_seconds=deadline_seconds,
+            minimum_scope_ratio=minimum_scope_ratio,
+            minimum_baseline_size=minimum_baseline_size,
+        )
+    with collection_lock(resolved_database_path):
+        return _collect_europe_data_engineers(
+            output_dir,
+            countries=countries,
+            limits=limits,
+            days_old=days_old,
+            distance_km=distance_km,
+            scrape_fn=scrape_fn,
+            run_id=run_id,
+            database_path=resolved_database_path,
+            as_of=as_of,
+            deadline_seconds=deadline_seconds,
+            minimum_scope_ratio=minimum_scope_ratio,
+            minimum_baseline_size=minimum_baseline_size,
+        )
+
+
+def _collect_europe_data_engineers(
+    output_dir: str | Path,
+    *,
+    countries: Iterable[EuropeCountry] = EUROPE_COUNTRIES,
+    limits: Iterable[int] = (100, 500, 1000),
+    days_old: int = 3650,
+    distance_km: int = 1000,
+    scrape_fn: Callable[..., Any] | None = None,
+    run_id: str | None = None,
+    database_path: str | Path,
+    as_of: date | None = None,
+    deadline_seconds: float = 2700,
+    minimum_scope_ratio: float = 0.5,
+    minimum_baseline_size: int = 20,
 ) -> EuropeSummary:
     directory = Path(output_dir)
     run_key = run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -153,14 +218,23 @@ def collect_europe_data_engineers(
         raise ValueError("limits must contain positive integers")
     if days_old <= 0:
         raise ValueError("days_old must be positive")
+    if not country_list:
+        raise ValueError("countries must not be empty")
+    if not 0 < minimum_scope_ratio <= 1:
+        raise ValueError("minimum_scope_ratio must be between 0 and 1")
+    if minimum_baseline_size <= 0:
+        raise ValueError("minimum_baseline_size must be positive")
     aggregate: dict[str, dict[str, Any]] = {}
     country_summaries = []
     error_count = 0
+    countries_completed = 0
+    country_unique_jobs = 0
+    deadline = time.monotonic() + deadline_seconds
 
     for country in country_list:
         country_dir = directory / "snapshots" / _slug(country.name)
         largest_path = country_dir / "largest-batch.json"
-        largest = None
+        historical_largest = None
         if largest_path.exists():
             candidate = json.loads(largest_path.read_text(encoding="utf-8"))
             metadata = candidate.get("metadata", {})
@@ -171,8 +245,10 @@ def collect_europe_data_engineers(
                 and metadata.get("days_old") == days_old
                 and metadata.get("distance_km") == distance_km
             ):
-                largest = candidate
+                historical_largest = candidate
         attempts = []
+        current_largest = None
+        country_succeeded = True
         for limit in limit_list:
             search = SearchConfig(
                 country=country.name,
@@ -184,7 +260,11 @@ def collect_europe_data_engineers(
                 distance_km=distance_km,
                 remote_only=False,
             )
-            raw_rows, collector_errors = collect_indeed(search, scrape_fn=scrape_fn)
+            raw_rows, collector_errors = collect_indeed(
+                search,
+                scrape_fn=scrape_fn,
+                deadline_seconds=max(0, deadline - time.monotonic()),
+            )
             unique = {}
             normalization_errors = []
             for index, raw in enumerate(raw_rows):
@@ -212,27 +292,46 @@ def collect_europe_data_engineers(
             _write_json(snapshot, payload)
             attempts.append({**payload["metadata"], "snapshot": str(snapshot)})
             error_count += len(collector_errors) + len(normalization_errors)
-            if largest is None or len(payload["jobs"]) > len(largest["jobs"]):
-                largest = payload
-                _write_json(largest_path, largest)
+            country_succeeded = country_succeeded and not (
+                collector_errors or normalization_errors
+            )
+            if current_largest is None or len(payload["jobs"]) > len(current_largest["jobs"]):
+                current_largest = payload
+            if historical_largest is None or len(payload["jobs"]) > len(historical_largest["jobs"]):
+                historical_largest = payload
+                _write_json(largest_path, historical_largest)
 
-        if largest is None:
-            largest = {"metadata": {"unique_jobs": 0}, "jobs": []}
-            _write_json(largest_path, largest)
-        for job in largest["jobs"]:
+        if historical_largest is None:
+            historical_largest = {"metadata": {"unique_jobs": 0}, "jobs": []}
+            _write_json(largest_path, historical_largest)
+        if current_largest is None:
+            current_largest = {"metadata": {"unique_jobs": 0}, "jobs": []}
+        country_unique_jobs += len(current_largest["jobs"])
+        for job in current_largest["jobs"]:
             aggregate.setdefault(job["dedupe_key"], job)
+        countries_completed += int(country_succeeded)
         country_summaries.append(
             {
                 "country": country.name,
                 "country_code": country.code,
                 "attempts": attempts,
                 "largest_snapshot": str(largest_path),
-                "best_unique_jobs": len(largest["jobs"]),
+                "best_unique_jobs": len(current_largest["jobs"]),
             }
         )
 
     all_jobs = list(aggregate.values())
-    title_matched_jobs = [job for job in all_jobs if _DATA_ENGINEER_RE.search(job["title"])]
+    duplicate_rows = country_unique_jobs - len(all_jobs)
+    classified_jobs = [
+        (
+            job,
+            assess_freshness(job.get("published_at"), days_old=days_old, today=as_of),
+        )
+        for job in all_jobs
+    ]
+    freshness_counts = Counter(status for _, status in classified_jobs)
+    fresh_jobs = [job for job, status in classified_jobs if status == "fresh"]
+    title_matched_jobs = [job for job in fresh_jobs if _DATA_ENGINEER_RE.search(job["title"])]
     selected_jobs = [
         job
         for job in title_matched_jobs
@@ -244,8 +343,15 @@ def collect_europe_data_engineers(
     )
     resolved_database_path = Path(database_path) if database_path else directory / "jobs.db"
     scope_key = "europe:data-engineer"
+    scope_anomaly = False
+    previous_scope_size = 0
     with JobRepository(resolved_database_path) as repository:
+        repository.abandon_stale_runs(older_than=timedelta(hours=24))
         repository.ensure_scope(scope_key, "europe", label="Europe Data Engineer")
+        previous_scope_size = repository.connection.execute(
+            "SELECT count(*) FROM scope_jobs WHERE scope_key = ?",
+            (scope_key,),
+        ).fetchone()[0]
         database_run_id = repository.start_run(
             {
                 "mode": "europe-data-engineer",
@@ -285,21 +391,30 @@ def collect_europe_data_engineers(
                     },
                     commit=False,
                 )
-                source_text = f"{job.title}\n{job.description}"
-                repository.replace_job_technology_mentions(
+                replace_job_annotations(
+                    repository,
                     job_id,
-                    extract_technology_mentions(source_text),
-                    commit=False,
-                )
-                repository.replace_job_concepts(
-                    job_id,
-                    extract_concept_mentions(source_text),
+                    job.title,
+                    job.description,
                     commit=False,
                 )
                 scope_memberships.append(
                     (job_id, job.eligibility, job.eligibility_reason)
                 )
-            repository.replace_scope_jobs(scope_key, scope_memberships, commit=False)
+            scope_anomaly = (
+                error_count == 0
+                and previous_scope_size >= minimum_baseline_size
+                and len(scope_memberships) < previous_scope_size * minimum_scope_ratio
+            )
+            if scope_anomaly:
+                error_count += 1
+            if error_count == 0:
+                repository.replace_scope_jobs(
+                    scope_key,
+                    scope_memberships,
+                    run_id=database_run_id,
+                    commit=False,
+                )
             rows_eligible = sum(
                 eligibility == "eligible"
                 for _, eligibility, _ in scope_memberships
@@ -308,9 +423,25 @@ def collect_europe_data_engineers(
                 eligibility == "unknown"
                 for _, eligibility, _ in scope_memberships
             )
+            repository.record_run_quality(
+                database_run_id,
+                rows_fresh=freshness_counts["fresh"],
+                rows_stale=freshness_counts["stale"],
+                rows_future=freshness_counts["future"],
+                rows_invalid_date=freshness_counts["invalid"],
+                rows_missing_date=freshness_counts["missing"],
+                commit=False,
+            )
+            run_status = (
+                "succeeded"
+                if error_count == 0
+                else "partial"
+                if countries_completed > 0
+                else "failed"
+            )
             repository.finish_run(
                 database_run_id,
-                status="succeeded",
+                status=run_status,
                 rows_received=len(all_jobs),
                 rows_eligible=rows_eligible,
                 rows_unknown=rows_unknown,
@@ -334,13 +465,19 @@ def collect_europe_data_engineers(
     _write_json(directory / "jobs-selected.json", selected_rows)
     summary_payload = {
         "run_id": run_key,
-        "countries_completed": len(country_list),
+        "countries_completed": countries_completed,
+        "countries_attempted": len(country_list),
+        "countries_failed": len(country_list) - countries_completed,
         "raw_unique_jobs": len(all_jobs),
         "selected_data_engineers": len(selected_rows),
         "technology_counts": dict(technology_counts.most_common()),
         "database_path": str(resolved_database_path),
         "database_run_id": database_run_id,
         "error_count": error_count,
+        "scope_anomaly": scope_anomaly,
+        "previous_scope_size": previous_scope_size,
+        "duplicate_rows": duplicate_rows,
+        "freshness": dict(freshness_counts),
         "countries": country_summaries,
     }
     _write_json(directory / "summary.json", summary_payload)
@@ -369,11 +506,21 @@ def collect_europe_data_engineers(
         )
     (directory / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return EuropeSummary(
-        countries_completed=len(country_list),
+        countries_completed=countries_completed,
         raw_unique_jobs=len(all_jobs),
         selected_data_engineers=len(selected_rows),
         error_count=error_count,
         output_dir=str(directory),
         database_path=str(resolved_database_path),
         database_run_id=database_run_id,
+        rows_fresh=freshness_counts["fresh"],
+        rows_stale=freshness_counts["stale"],
+        rows_future=freshness_counts["future"],
+        rows_invalid_date=freshness_counts["invalid"],
+        rows_missing_date=freshness_counts["missing"],
+        countries_attempted=len(country_list),
+        countries_failed=len(country_list) - countries_completed,
+        scope_anomaly=scope_anomaly,
+        previous_scope_size=previous_scope_size,
+        duplicate_rows=duplicate_rows,
     )

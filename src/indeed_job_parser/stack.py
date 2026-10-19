@@ -89,6 +89,14 @@ CONCEPT_CATALOG: tuple[tuple[str, str], ...] = (
 _COMPILED_CONCEPTS = tuple(
     (name, re.compile(pattern, re.IGNORECASE)) for name, pattern in CONCEPT_CATALOG
 )
+_TECHNOLOGY_MENTION_CATALOG = tuple(
+    (technology, pattern, category)
+    for category, entries in _COMPILED_CATALOG.items()
+    for technology, pattern in entries
+)
+_CONCEPT_MENTION_CATALOG = tuple(
+    (concept, pattern, "") for concept, pattern in _COMPILED_CONCEPTS
+)
 
 _REQUIREMENT_HEADINGS = re.compile(
     r"^(?:requirements?|required qualifications?|qualifications?|profile required|"
@@ -221,50 +229,45 @@ def _without_links_and_emails(evidence: str) -> str:
     )
 
 
-def extract_technology_mentions(text: str | None) -> list[TechnologyMention]:
-    """Extract technologies with deterministic context and auditable evidence."""
-    selected: dict[str, TechnologyMention] = {}
+def _extract_mentions(
+    text: str | None,
+    catalog: tuple[tuple[str, re.Pattern[str], str], ...],
+) -> list[tuple[str, str, str, str | None, str]]:
+    selected: dict[str, tuple[str, str, str, str | None, str]] = {}
     for section, evidence, section_type in _iter_evidence(text or ""):
         searchable = _without_links_and_emails(evidence)
-        for category, entries in _COMPILED_CATALOG.items():
-            for technology, pattern in entries:
-                match = pattern.search(searchable)
-                if match is None:
-                    continue
-                requirement_type = _classify_mention(searchable, match.start(), section_type)
-                mention = TechnologyMention(
-                    category=category,
-                    technology=technology,
-                    requirement_type=requirement_type,
-                    section=section,
-                    evidence_text=evidence,
-                )
-                current = selected.get(technology)
-                if current is None or _MENTION_PRIORITY[requirement_type] > _MENTION_PRIORITY[current.requirement_type]:
-                    selected[technology] = mention
-    return list(selected.values())
-
-
-def extract_concept_mentions(text: str | None) -> list[ConceptMention]:
-    """Extract non-tool data concepts separately from the technology stack."""
-    selected: dict[str, ConceptMention] = {}
-    for section, evidence, section_type in _iter_evidence(text or ""):
-        searchable = _without_links_and_emails(evidence)
-        for concept, pattern in _COMPILED_CONCEPTS:
+        for name, pattern, category in catalog:
             match = pattern.search(searchable)
             if match is None:
                 continue
             requirement_type = _classify_mention(searchable, match.start(), section_type)
-            mention = ConceptMention(
-                concept=concept,
-                requirement_type=requirement_type,
-                section=section,
-                evidence_text=evidence,
-            )
-            current = selected.get(concept)
-            if current is None or _MENTION_PRIORITY[requirement_type] > _MENTION_PRIORITY[current.requirement_type]:
-                selected[concept] = mention
+            mention = (name, category, requirement_type, section, evidence)
+            current = selected.get(name)
+            if current is None or _MENTION_PRIORITY[requirement_type] > _MENTION_PRIORITY[current[2]]:
+                selected[name] = mention
     return list(selected.values())
+
+
+def extract_technology_mentions(text: str | None) -> list[TechnologyMention]:
+    """Extract technologies with deterministic context and auditable evidence."""
+    return [
+        TechnologyMention(category, name, requirement_type, section, evidence)
+        for name, category, requirement_type, section, evidence in _extract_mentions(
+            text,
+            _TECHNOLOGY_MENTION_CATALOG,
+        )
+    ]
+
+
+def extract_concept_mentions(text: str | None) -> list[ConceptMention]:
+    """Extract non-tool data concepts separately from the technology stack."""
+    return [
+        ConceptMention(name, requirement_type, section, evidence)
+        for name, _category, requirement_type, section, evidence in _extract_mentions(
+            text,
+            _CONCEPT_MENTION_CATALOG,
+        )
+    ]
 
 
 def extract_stack(text: str | None) -> dict[str, list[str]]:
